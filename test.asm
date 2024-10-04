@@ -78,21 +78,42 @@ start:
     INT 10h        ; Llamada a la interrupción BIOS para cambiar al modo gráfico
 
     ; Llamar a la nueva macro para rellenar la pantalla con color blanco
-    RELLENAR_PANTALLA 08h  ; Color blanco (0Fh)
+    RELLENAR_PANTALLA 08h 
 
     ; Dibuja bordes
 
-
+    DIBUJAR_RECTANGULO 60, 50, 360, 30, 0Fh
+    DIBUJAR_RECTANGULO 425, 50, 110, 30, 0Fh
     ; Dibuja un rectángulo en las coordenadas especificadas
-    DIBUJAR_RECTANGULO 550, 90, 60, 300, 0Fh  ; Rectángulo en (375, 90), tamaño 50x300
-	DIBUJAR_RECTANGULO 60, 90, 470, 300, 0Fh
-    ; Dibuja los cuadrados en las posiciones exactas que tenías
+    DIBUJAR_RECTANGULO 550, 90, 60, 300, 0Fh  
+	DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ;Cuadro de dibujo
+    DIBUJAR_RECTANGULO 60, 90, 60, 300, 0Fh
+
+ 
     DIBUJAR_CUADRADO 564, 350, 30, 01h ; Primer cuadrado rojo
     DIBUJAR_CUADRADO 564, 300, 30, 02h ; Segundo cuadrado
     DIBUJAR_CUADRADO 564, 250, 30, 04h ; Tercer cuadrado
-    DIBUJAR_CUADRADO 564, 200, 30, 06h ; Cuarto cuadrado
-    DIBUJAR_CUADRADO 564, 150, 30, 09h ; Quinto cuadrado
-    DIBUJAR_CUADRADO 564, 100, 30, 13h ; Sexto cuadrado
+    DIBUJAR_CUADRADO 564, 200, 30, 05h ; Cuarto cuadrado
+    DIBUJAR_CUADRADO 564, 150, 30, 06h ; Quinto cuadrado
+    DIBUJAR_CUADRADO 564, 100, 30, 07h ; Sexto cuadrado
+
+    DIBUJAR_CUADRADO 75, 350, 30, 08h ; Primer cuadrado rojo
+    DIBUJAR_CUADRADO 75, 300, 30, 09h ; Segundo cuadrado
+    DIBUJAR_CUADRADO 75, 250, 30, 10h ; Tercer cuadrado
+    DIBUJAR_CUADRADO 75, 200, 30, 11h ; Cuarto cuadrado
+    DIBUJAR_CUADRADO 75, 150, 30, 0Ah ; Quinto cuadrado
+    DIBUJAR_CUADRADO 75, 100, 30, 0Bh ; Sexto cuadrado
+
+    DIBUJAR_CUADRADO 564, 410, 30, 0Fh ;tecla arriba
+    DIBUJAR_CUADRADO 564, 445, 30, 0Fh ;tecla ABAJO
+    DIBUJAR_CUADRADO 529, 445, 30, 0Fh ;tecla IZQ
+    DIBUJAR_CUADRADO 600, 445, 30, 0Fh ;tecla DER
+
+
+    DIBUJAR_RECTANGULO 60, 400, 100, 30, 0Fh
+    DIBUJAR_RECTANGULO 60, 435, 100, 30, 0Fh
+    DIBUJAR_RECTANGULO 167, 400, 255, 30, 0Fh;CAMPO TEXTO
+    DIBUJAR_RECTANGULO 430, 400, 105, 30, 0Fh;iNSERTAR IMAGEN
 
     ; Esperar una tecla indefinidamente (no regresa al modo texto)
   ; Bucle infinito hasta que se presione Esc

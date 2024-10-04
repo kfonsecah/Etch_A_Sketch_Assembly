@@ -2,6 +2,11 @@
 .stack 100h
 
 .data
+
+    current_x dw 320        ; Coordenada X inicial (centro de la pantalla)
+    current_y dw 240        ; Coordenada Y inicial (centro de la pantalla)
+    color_pixel db 01h 
+
     POSICION macro x, y
         mov ah, 07h
         mov bh, 0
@@ -115,8 +120,10 @@ start:
     DIBUJAR_RECTANGULO 167, 400, 255, 30, 0Fh;CAMPO TEXTO
     DIBUJAR_RECTANGULO 430, 400, 105, 30, 0Fh;iNSERTAR IMAGEN
 
-    ; Esperar una tecla indefinidamente (no regresa al modo texto)
-  ; Bucle infinito hasta que se presione Esc
+
+    mov ax, [current_x]
+    mov dx, [current_y]
+    PINTA_PIXEL ax, dx, color_pixel
 bucle_principal:
     mov ah, 01h       ; Verificar si se presionó una tecla
     int 16h           ; Sin esperar
@@ -124,12 +131,62 @@ bucle_principal:
     
     mov ah, 00h       ; Leer la tecla presionada
     int 16h
-    cmp al, 27        ; Comparar con el código ASCII de Esc (27)
-    jne bucle_principal  ; Si no es Esc, volver al inicio del bucle
 
-    ; Si se presionó Esc, salir del bucle y terminar el programa
-    mov ah, 4ch
+    cmp al, 27        ; Comparar con Esc
+    je salir          ; Si se presiona Esc, salir del programa
+
+    cmp al, ' '       ; Si se presiona espacio, dibujar un píxel negro
+    je dibujar_pixel
+
+    cmp al, 72        ; Flecha arriba
+    je mover_arriba
+
+    cmp al, 80        ; Flecha abajo
+    je mover_abajo
+
+    cmp al, 75        ; Flecha izquierda
+    je mover_izquierda
+
+    cmp al, 77        ; Flecha derecha
+    je mover_derecha
+
+    jmp bucle_principal
+
+; Funciones de movimiento
+mover_arriba:
+    cmp [current_y], 0  ; No exceder el borde superior
+    jle bucle_principal
+    dec word ptr [current_y]
+    jmp bucle_principal
+
+mover_abajo:
+    cmp [current_y], 479  ; No exceder el borde inferior
+    jge bucle_principal
+    inc word ptr [current_y]
+    jmp bucle_principal
+
+mover_izquierda:
+    cmp [current_x], 0  ; No exceder el borde izquierdo
+    jle bucle_principal
+    dec word ptr [current_x]
+    jmp bucle_principal
+
+mover_derecha:
+    cmp [current_x], 639  ; No exceder el borde derecho
+    jge bucle_principal
+    inc word ptr [current_x]
+    jmp bucle_principal
+
+; Dibuja el píxel en la posición actual
+dibujar_pixel:
+    mov ax, [current_x]
+    mov dx, [current_y]
+    PINTA_PIXEL ax, dx, color_pixel
+    jmp bucle_principal
+
+; Salir del programa
+salir:
+    mov ah, 4Ch
     int 21h
-    ; No regresar al modo texto, el programa queda en modo gráfico
 
 end start

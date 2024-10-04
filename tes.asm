@@ -2,108 +2,130 @@
 .stack 100h
 
 .data
-    xPos dw 160        ; Posición X inicial (centro de la pantalla)
-    yPos dw 100        ; Posición Y inicial (centro de la pantalla)
+    current_x dw 320          ; Coordenada X inicial (centro de la pantalla)
+    current_y dw 240          ; Coordenada Y inicial (centro de la pantalla)
+    color_pixel db 02h        ; Color del píxel (verde)
+    background_color db 08h   ; Color de fondo (blanco para borrar)
+
+    ; Mensaje para depuración
+    msg db 'Tecla presionada: $'   ; El símbolo $ es el terminador de cadena para int 21h función 09h
+
+    ; Macro para pintar un píxel
+    PINTAR_PIXEL macro x, y, color
+        mov ah, 0Ch
+        mov al, color
+        mov bh, 0
+        mov cx, x
+        mov dx, y
+        int 10h
+    endm
 
 .code
-start:
-    mov ax, @data
-    mov ds, ax
 
-    ; Cambiar al modo gráfico 13h (320x200, 256 colores)
-    mov ax, 13h
-    int 10h
+DIBUJAR_PIXEL proc near
+    mov ax, [current_x]
+    mov dx, [current_y]
+    PINTAR_PIXEL ax, dx, color_pixel
+    ret
+DIBUJAR_PIXEL endp
 
-draw_square:
-    ; Dibujar un cuadrado 6x6 en la posición actual
-    mov ax, 0A000h             ; Segmento de la memoria de video
-    mov es, ax
+BORRAR_PIXEL proc near
+    mov ax, [current_x]
+    mov dx, [current_y]
+    PINTAR_PIXEL ax, dx, background_color
+    ret
+BORRAR_PIXEL endp
 
-    mov dx, [yPos]             ; Cargar Y inicial en DX
-    mov cx, 6                  ; Establecer el número de filas (6)
-
-draw_row:
-    push cx                    ; Guardar el contador de filas
-    mov bx, [xPos]             ; Cargar X inicial en BX
-    mov cx, 6                  ; Establecer el número de columnas (6)
-
-draw_column:
-    ; Calcular la dirección de memoria de video
-    mov ax, dx                 ; Cargar Y actual en AX
-    mov di, 320                ; El ancho de la pantalla es 320
-    mul di                     ; Y * 320
-    add ax, bx                 ; Sumar la posición X
-    mov di, ax                 ; Guardar el resultado en DI
-
-    ; Dibujar un píxel rojo (índice 4 en la paleta VGA)
-    mov al, 4                  ; Color rojo
-    stosb                      ; Dibujar el píxel
-
-    inc bx                     ; Avanzar a la siguiente columna (X)
-    dec cx                     ; Reducir el contador de columnas
-    jnz draw_column            ; Si no hemos terminado, repetir
-
-    ; Avanzar a la siguiente fila
-    inc dx                     ; Incrementar la posición Y (siguiente fila)
-    pop cx                     ; Restaurar el contador de filas
-    dec cx                     ; Reducir el contador de filas
-    jnz draw_row               ; Si no hemos terminado, repetir
-
-    ; Esperar para redibujar
-    jmp wait_key
-
-wait_key:
-    ; Esperar una tecla
+GESTIONAR_TECLADO proc near
     mov ah, 00h
     int 16h
 
-    ; Verificar qué tecla fue presionada
-    cmp al, 'w'
-    je move_up
-    cmp al, 's'
-    je move_down
-    cmp al, 'a'
-    je move_left
-    cmp al, 'd'
-    je move_right
-    cmp al, 27                 ; Esc para salir
-    je quit
+    cmp al, 'W'
+    je mover_arriba
 
-    jmp wait_key
+    cmp al, 'S'
+    je mover_abajo
 
-move_up:
-    ; Mover hacia arriba
-    cmp word ptr [yPos], 0      ; No exceder el borde superior
-    jle wait_key
-    sub word ptr [yPos], 6      ; Decrementar la posición Y (por tamaño del cuadrado)
-    jmp draw_square             ; Dibujar en la nueva posición
+    cmp al, 'A'
+    je mover_izquierda
 
-move_down:
-    ; Mover hacia abajo
-    cmp word ptr [yPos], 194    ; No exceder el borde inferior (199 - 6)
-    jge wait_key
-    add word ptr [yPos], 6      ; Incrementar la posición Y (por tamaño del cuadrado)
-    jmp draw_square             ; Dibujar en la nueva posición
+    cmp al, 'D'
+    je mover_derecha
 
-move_left:
-    ; Mover hacia la izquierda
-    cmp word ptr [xPos], 0      ; No exceder el borde izquierdo
-    jle wait_key
-    sub word ptr [xPos], 6      ; Decrementar la posición X (por tamaño del cuadrado)
-    jmp draw_square             ; Dibujar en la nueva posición
+    cmp al, 27      ; Esc para salir
+    je salir
 
-move_right:
-    ; Mover hacia la derecha
-    cmp word ptr [xPos], 314    ; No exceder el borde derecho (320 - 6)
-    jge wait_key
-    add word ptr [xPos], 6      ; Incrementar la posición X (por tamaño del cuadrado)
-    jmp draw_square             ; Dibujar en la nueva posición
+    ret
 
-quit:
-    ; Regresar al modo texto
+mover_arriba:
+    cmp [current_y], 0
+    jle movimiento_hecho
+    call BORRAR_PIXEL
+    dec word ptr [current_y]
+    call DIBUJAR_PIXEL
+    jmp movimiento_hecho
+
+mover_abajo:
+    cmp [current_y], 479
+    jge movimiento_hecho
+    call BORRAR_PIXEL
+    inc word ptr [current_y]
+    call DIBUJAR_PIXEL
+    jmp movimiento_hecho
+
+mover_izquierda:
+    cmp [current_x], 0
+    jle movimiento_hecho
+    call BORRAR_PIXEL
+    dec word ptr [current_x]
+    call DIBUJAR_PIXEL
+    jmp movimiento_hecho
+
+mover_derecha:
+    cmp [current_x], 639
+    jge movimiento_hecho
+    call BORRAR_PIXEL
+    inc word ptr [current_x]
+    call DIBUJAR_PIXEL
+
+movimiento_hecho:
+    ret
+GESTIONAR_TECLADO endp
+
+IMPRIMIR_MENSAJE proc near
+    lea dx, msg          ; Cargar la dirección del mensaje
+    mov ah, 09h          ; Función de DOS para imprimir una cadena
+    int 21h              ; Interrupción para mostrar el mensaje
+    ret
+IMPRIMIR_MENSAJE endp
+
+start:
+    ; Establecer el modo texto para depuración
     mov ax, 03h
     int 10h
-    ; Terminar el programa
-    mov ax, 4C00h
+
+    ; Mostrar mensaje de depuración en modo texto
+    call IMPRIMIR_MENSAJE
+
+    ; Esperar a que el usuario presione una tecla
+    mov ah, 00h
+    int 16h
+
+    ; Cambiar al modo gráfico 12h (640x480, 16 colores)
+    mov ax, 0012h
+    int 10h
+
+    ; Dibuja el píxel inicial en el centro de la pantalla
+    call DIBUJAR_PIXEL
+
+bucle_principal:
+    call GESTIONAR_TECLADO
+    jmp bucle_principal
+
+salir:
+    ; Volver al modo texto antes de salir
+    mov ax, 03h
+    int 10h
+    mov ah, 4Ch
     int 21h
-END start
+end start

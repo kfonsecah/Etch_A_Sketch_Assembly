@@ -1,131 +1,102 @@
-.model small
-.stack 100h
+.MODEL small
+.STACK 100h
 
-.data
-    current_x dw 320          ; Coordenada X inicial (centro de la pantalla)
-    current_y dw 240          ; Coordenada Y inicial (centro de la pantalla)
-    color_pixel db 02h        ; Color del píxel (verde)
-    background_color db 08h   ; Color de fondo (blanco para borrar)
+.DATA
+    current_x dw 320         ; Coordenada X inicial (centro de la pantalla)
+    current_y dw 240         ; Coordenada Y inicial (centro de la pantalla)
+    color_pixel db 0Ah       ; Color del píxel (blanco)
 
-    ; Mensaje para depuración
-    msg db 'Tecla presionada: $'   ; El símbolo $ es el terminador de cadena para int 21h función 09h
-
-    ; Macro para pintar un píxel
-    PINTAR_PIXEL macro x, y, color
-        mov ah, 0Ch
-        mov al, color
-        mov bh, 0
-        mov cx, x
-        mov dx, y
-        int 10h
-    endm
-
-.code
-
-DIBUJAR_PIXEL proc near
-    mov ax, [current_x]
-    mov dx, [current_y]
-    PINTAR_PIXEL ax, dx, color_pixel
-    ret
-DIBUJAR_PIXEL endp
-
-BORRAR_PIXEL proc near
-    mov ax, [current_x]
-    mov dx, [current_y]
-    PINTAR_PIXEL ax, dx, background_color
-    ret
-BORRAR_PIXEL endp
-
-GESTIONAR_TECLADO proc near
-    mov ah, 00h
-    int 16h
-
-    cmp al, 'W'
-    je mover_arriba
-
-    cmp al, 'S'
-    je mover_abajo
-
-    cmp al, 'A'
-    je mover_izquierda
-
-    cmp al, 'D'
-    je mover_derecha
-
-    cmp al, 27      ; Esc para salir
-    je salir
-
-    ret
-
-mover_arriba:
-    cmp [current_y], 0
-    jle movimiento_hecho
-    call BORRAR_PIXEL
-    dec word ptr [current_y]
-    call DIBUJAR_PIXEL
-    jmp movimiento_hecho
-
-mover_abajo:
-    cmp [current_y], 479
-    jge movimiento_hecho
-    call BORRAR_PIXEL
-    inc word ptr [current_y]
-    call DIBUJAR_PIXEL
-    jmp movimiento_hecho
-
-mover_izquierda:
-    cmp [current_x], 0
-    jle movimiento_hecho
-    call BORRAR_PIXEL
-    dec word ptr [current_x]
-    call DIBUJAR_PIXEL
-    jmp movimiento_hecho
-
-mover_derecha:
-    cmp [current_x], 639
-    jge movimiento_hecho
-    call BORRAR_PIXEL
-    inc word ptr [current_x]
-    call DIBUJAR_PIXEL
-
-movimiento_hecho:
-    ret
-GESTIONAR_TECLADO endp
-
-IMPRIMIR_MENSAJE proc near
-    lea dx, msg          ; Cargar la dirección del mensaje
-    mov ah, 09h          ; Función de DOS para imprimir una cadena
-    int 21h              ; Interrupción para mostrar el mensaje
-    ret
-IMPRIMIR_MENSAJE endp
-
-start:
-    ; Establecer el modo texto para depuración
-    mov ax, 03h
+; Macro para dibujar un píxel en la pantalla
+PINTA_PIXEL macro x, y, color
+    mov ah, 0Ch
+    mov al, color
+    mov bh, 0
+    mov cx, x
+    mov dx, y
     int 10h
+endm
 
-    ; Mostrar mensaje de depuración en modo texto
-    call IMPRIMIR_MENSAJE
+.CODE
+start:
+    ; Inicializar segmentos de datos
+    mov ax, @data
+    mov ds, ax
 
-    ; Esperar a que el usuario presione una tecla
-    mov ah, 00h
-    int 16h
-
-    ; Cambiar al modo gráfico 12h (640x480, 16 colores)
+    ; Cambiar a modo gráfico 12h (640x480, 16 colores)
     mov ax, 0012h
     int 10h
 
-    ; Dibuja el píxel inicial en el centro de la pantalla
-    call DIBUJAR_PIXEL
+    ; Dibujar el primer píxel en la posición inicial
+    call dibujar_trazo
 
-bucle_principal:
-    call GESTIONAR_TECLADO
-    jmp bucle_principal
+main_loop:
+    ; Leer la tecla presionada (sin esperar)
+    mov ah, 00h
+    int 16h
 
+    ; Comparar las teclas 'W', 'A', 'S', 'D' por sus códigos ASCII
+    cmp al, 'w'
+    je mover_arriba
+
+    cmp al, 's'
+    je mover_abajo
+
+    cmp al, 'a'
+    je mover_izquierda
+
+    cmp al, 'd'
+    je mover_derecha
+
+    cmp al, 27       ; Comparar con Esc (código ASCII 27)
+    je salir         ; Salir si se presiona Esc
+
+    jmp main_loop    ; Volver al bucle principal
+
+; Funciones de movimiento
+mover_arriba:
+    cmp [current_y], 0         ; Verificar si no se excede el borde superior
+    jle main_loop              ; Si está en el borde, no mover más arriba
+    dec word ptr [current_y]   ; Mover hacia arriba
+    call dibujar_trazo
+    jmp main_loop
+
+mover_abajo:
+    cmp [current_y], 479       ; Verificar si no se excede el borde inferior
+    jge main_loop              ; Si está en el borde, no mover más abajo
+    inc word ptr [current_y]   ; Mover hacia abajo
+    call dibujar_trazo
+    jmp main_loop
+
+mover_izquierda:
+    ; Verificar si no se excede el borde izquierdo
+    cmp [current_x], 1 ; Comparamos con 1 para evitar que el píxel quede fuera de la pantalla
+    jle main_loop
+    dec word ptr [current_x] ; Mover hacia la izquierda
+    call dibujar_trazo
+    jmp main_loop
+
+mover_derecha:
+    ; Verificar si no se excede el borde derecho
+    cmp [current_x], 638 ; Comparamos con 638 para evitar que el píxel quede fuera de la pantalla
+    jge main_loop
+    inc word ptr [current_x] ; Mover hacia la derecha
+    call dibujar_trazo
+    jmp main_loop
+
+; Dibuja el píxel en la nueva posición
+dibujar_trazo:
+    mov ax, [current_x]        ; Cargar la nueva coordenada X en AX
+    mov dx, [current_y]        ; Cargar la nueva coordenada Y en DX
+     PINTA_PIXEL [current_x], [current_y], color_pixel ; Llamar a la macro con los valores correctos
+    ret
+
+; Salir del programa
 salir:
-    ; Volver al modo texto antes de salir
-    mov ax, 03h
+    ; Restaurar el modo de texto 03h
+    mov ax, 0003h
     int 10h
+    ; Terminar el programa
     mov ah, 4Ch
     int 21h
-end start
+
+END start

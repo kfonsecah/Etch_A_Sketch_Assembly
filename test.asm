@@ -5,15 +5,9 @@
 
     current_x dw 320        ; Coordenada X inicial (centro de la pantalla)
     current_y dw 240        ; Coordenada Y inicial (centro de la pantalla)
-    color_pixel db 01h 
+    color_pixel db 0Ah 
 
-    POSICION macro x, y
-        mov ah, 07h
-        mov bh, 0
-        mov dh, y
-        mov dl, x
-        int 10h
-    endm
+ 
     
     PINTA_PIXEL macro x, y, color
         mov ah, 0Ch
@@ -121,68 +115,67 @@ start:
     DIBUJAR_RECTANGULO 430, 400, 105, 30, 0Fh;iNSERTAR IMAGEN
 
 
-    mov ax, [current_x]
-    mov dx, [current_y]
-    PINTA_PIXEL ax, dx, color_pixel
-bucle_principal:
-    mov ah, 01h       ; Verificar si se presionó una tecla
-    int 16h           ; Sin esperar
-    jz  bucle_principal  ; Si no se presionó tecla, volver al inicio del bucle
-    
-    mov ah, 00h       ; Leer la tecla presionada
+    call dibujar_trazo
+
+main_loop:
+   mov ah, 00h
     int 16h
 
-    cmp al, 27        ; Comparar con Esc
-    je salir          ; Si se presiona Esc, salir del programa
-
-    cmp al, ' '       ; Si se presiona espacio, dibujar un píxel negro
-    je dibujar_pixel
-
-    cmp al, 72        ; Flecha arriba
+    ; Comparar las teclas 'W', 'A', 'S', 'D' por sus códigos ASCII
+    cmp al, 'w'
     je mover_arriba
 
-    cmp al, 80        ; Flecha abajo
+    cmp al, 's'
     je mover_abajo
 
-    cmp al, 75        ; Flecha izquierda
+    cmp al, 'a'
     je mover_izquierda
 
-    cmp al, 77        ; Flecha derecha
+    cmp al, 'd'
     je mover_derecha
 
-    jmp bucle_principal
+    cmp al, 27       ; Comparar con Esc (código ASCII 27)
+    je salir         ; Salir si se presiona Esc
+
+    jmp main_loop
 
 ; Funciones de movimiento
 mover_arriba:
-    cmp [current_y], 0  ; No exceder el borde superior
-    jle bucle_principal
-    dec word ptr [current_y]
-    jmp bucle_principal
+    cmp [current_y], 0         ; Verificar si no se excede el borde superior
+    jle main_loop              ; Si está en el borde, no mover más arriba
+    dec word ptr [current_y]   ; Mover hacia arriba
+    call dibujar_trazo
+    jmp main_loop
 
 mover_abajo:
-    cmp [current_y], 479  ; No exceder el borde inferior
-    jge bucle_principal
-    inc word ptr [current_y]
-    jmp bucle_principal
+    cmp [current_y], 479       ; Verificar si no se excede el borde inferior
+    jge main_loop              ; Si está en el borde, no mover más abajo
+    inc word ptr [current_y]   ; Mover hacia abajo
+    call dibujar_trazo
+    jmp main_loop
 
 mover_izquierda:
-    cmp [current_x], 0  ; No exceder el borde izquierdo
-    jle bucle_principal
-    dec word ptr [current_x]
-    jmp bucle_principal
+    ; Verificar si no se excede el borde izquierdo
+    cmp [current_x], 1 ; Comparamos con 1 para evitar que el píxel quede fuera de la pantalla
+    jle main_loop
+    dec word ptr [current_x] ; Mover hacia la izquierda
+    call dibujar_trazo
+    jmp main_loop
 
 mover_derecha:
-    cmp [current_x], 639  ; No exceder el borde derecho
-    jge bucle_principal
-    inc word ptr [current_x]
-    jmp bucle_principal
+    ; Verificar si no se excede el borde derecho
+    cmp [current_x], 638 ; Comparamos con 638 para evitar que el píxel quede fuera de la pantalla
+    jge main_loop
+    inc word ptr [current_x] ; Mover hacia la derecha
+    call dibujar_trazo
+    jmp main_loop
 
-; Dibuja el píxel en la posición actual
-dibujar_pixel:
-    mov ax, [current_x]
-    mov dx, [current_y]
-    PINTA_PIXEL ax, dx, color_pixel
-    jmp bucle_principal
+; Dibuja el píxel en la nueva posición
+dibujar_trazo:
+    mov ax, [current_x]        ; Cargar la nueva coordenada X en AX
+    mov dx, [current_y]        ; Cargar la nueva coordenada Y en DX
+     PINTA_PIXEL [current_x], [current_y], color_pixel ; Llamar a la macro con los valores correctos
+    ret
 
 ; Salir del programa
 salir:

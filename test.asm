@@ -1,25 +1,29 @@
-.model small
-.stack 100h
+.MODEL small
+.STACK 100h
 
-.data
+.DATA
+    current_x dw 320         ; Coordenada X inicial (centro de la pantalla)
+    current_y dw 240         ; Coordenada Y inicial (centro de la pantalla)
+    color_pixel db 00h  
+    mensaje1 db ' Limpiar ', 0  ; Texto 1 a mostrar
+    mensaje2 db ' Dibujo sin nombre ', 0  
+    mensaje3 db ' Guardar Bosquejo ', 0 
+    mensaje4 db ' Cargar Bosquejo ', 0 
+    mensaje5 db ' Campo de texto ', 0 
+    mensaje6 db ' Insertar imagen ', 0 
 
-    current_x dw 320        ; Coordenada X inicial (centro de la pantalla)
-    current_y dw 240        ; Coordenada Y inicial (centro de la pantalla)
-    color_pixel db 0Ah 
 
- 
-    
-    PINTA_PIXEL macro x, y, color
-        mov ah, 0Ch
-        mov al, color
-        mov bh, 0
-        mov cx, x
-        mov dx, y
-        int 10h
-    endm
-    
-    ; Macro para dibujar un cuadrado en cualquier posición con tamaño y color
-    DIBUJAR_CUADRADO macro x_inicial, y_inicial, tamano, color
+; Macro para dibujar un píxel en la pantalla
+PINTA_PIXEL macro x, y, color
+    mov ah, 0Ch
+    mov al, color
+    mov bh, 0
+    mov cx, x
+    mov dx, y
+    int 10h
+endm
+
+ DIBUJAR_CUADRADO macro x_inicial, y_inicial, tamano, color
         local FILAS_CUADRADO, COLUMNAS_CUADRADO
     
         mov di, y_inicial
@@ -35,8 +39,7 @@
         jb FILAS_CUADRADO
     endm
 
-    ; Macro para dibujar un rectángulo con ancho, alto y color
-    DIBUJAR_RECTANGULO macro x_inicial, y_inicial, ancho, alto, color
+     DIBUJAR_RECTANGULO macro x_inicial, y_inicial, ancho, alto, color
         local FILAS_RECTANGULO, COLUMNAS_RECTANGULO
     
         mov di, y_inicial
@@ -52,8 +55,7 @@
         jb FILAS_RECTANGULO
     endm
 
-    ; Nueva macro para rellenar la pantalla con un color
-    RELLENAR_PANTALLA macro color
+     RELLENAR_PANTALLA macro color
         MOV DX, 0      ; Empieza en Y = 0
     RELLENAR_FILAS:
         MOV CX, 0      ; Empieza en X = 0
@@ -66,21 +68,42 @@
         CMP DX, 480   ; Hasta la fila 480
         JBE RELLENAR_FILAS
     endm
-    
-    COL dw 50
-    FIL dw 50
 
-.code
+   IMPRIMIR_TEXTO macro fila, columna, mensaje, color
+    local IMPRIMIR_CADENA, FIN
+    mov ah, 02h          ; Función para mover el cursor
+    mov bh, 0            ; Página de la pantalla
+    mov dh, fila         ; Fila del cursor
+    mov dl, columna      ; Columna del cursor
+    int 10h              ; Llamar a BIOS para mover el cursor
+
+    lea si, mensaje      ; Cargar la dirección del mensaje
+IMPRIMIR_CADENA:
+    lodsb                ; Cargar el siguiente carácter en AL
+    cmp al, 0            ; Verificar si es el fin de la cadena
+    je FIN
+    mov ah, 0Eh          ; Función de BIOS para imprimir el carácter
+    mov al, al           ; El carácter a imprimir
+    mov bl, color        ; Color del texto
+    int 10h              ; Llamar a BIOS para mostrar el carácter
+    jmp IMPRIMIR_CADENA
+FIN:
+endm
+
+.CODE
 start:
-    ; Establecer el modo gráfico 12h (640x480, 16 colores) sin consola
-    MOV AX, 0012h  ; Modo gráfico 12h
-    INT 10h        ; Llamada a la interrupción BIOS para cambiar al modo gráfico
+    ; Inicializar segmentos de datos
+    mov ax, @data
+    mov ds, ax
 
-    ; Llamar a la nueva macro para rellenar la pantalla con color blanco
+    ; Cambiar a modo gráfico 12h (640x480, 16 colores)
+    mov ax, 0012h
+    int 10h
+
     RELLENAR_PANTALLA 08h 
 
-    ; Dibuja bordes
-
+    ; Dibujar el primer píxel en la posición inicial
+   
     DIBUJAR_RECTANGULO 60, 50, 360, 30, 0Fh
     DIBUJAR_RECTANGULO 425, 50, 110, 30, 0Fh
     ; Dibuja un rectángulo en las coordenadas especificadas
@@ -112,13 +135,20 @@ start:
     DIBUJAR_RECTANGULO 60, 400, 100, 30, 0Fh
     DIBUJAR_RECTANGULO 60, 435, 100, 30, 0Fh
     DIBUJAR_RECTANGULO 167, 400, 255, 30, 0Fh;CAMPO TEXTO
-    DIBUJAR_RECTANGULO 430, 400, 105, 30, 0Fh;iNSERTAR IMAGEN
+    DIBUJAR_RECTANGULO 430, 400, 105, 30, 0Fh;
 
+    IMPRIMIR_TEXTO  4, 54, mensaje1, 1Fh  ;Limpiar
+    IMPRIMIR_TEXTO 4, 20, mensaje2, 2Fh   ;Dibujo sin nombre
+    IMPRIMIR_TEXTO  26, 7, mensaje3, 1Fh  ;Guardar Bosquejo
+    IMPRIMIR_TEXTO 28, 7, mensaje4, 2Fh  ;Cargar Bosquejo
+    IMPRIMIR_TEXTO 26, 28, mensaje5, 2Fh  ;Campo de texto
+    IMPRIMIR_TEXTO 26, 54, mensaje6, 2Fh  ;Campo de texto
+    
 
-    call dibujar_trazo
 
 main_loop:
-   mov ah, 00h
+    ; Leer la tecla presionada (sin esperar)
+    mov ah, 00h
     int 16h
 
     ; Comparar las teclas 'W', 'A', 'S', 'D' por sus códigos ASCII
@@ -137,18 +167,18 @@ main_loop:
     cmp al, 27       ; Comparar con Esc (código ASCII 27)
     je salir         ; Salir si se presiona Esc
 
-    jmp main_loop
+    jmp main_loop    ; Volver al bucle principal
 
 ; Funciones de movimiento
 mover_arriba:
-    cmp [current_y], 0         ; Verificar si no se excede el borde superior
+    cmp [current_y], 90         ; Verificar si no se excede el borde superior
     jle main_loop              ; Si está en el borde, no mover más arriba
     dec word ptr [current_y]   ; Mover hacia arriba
     call dibujar_trazo
     jmp main_loop
 
 mover_abajo:
-    cmp [current_y], 479       ; Verificar si no se excede el borde inferior
+    cmp [current_y], 389       ; Verificar si no se excede el borde inferior
     jge main_loop              ; Si está en el borde, no mover más abajo
     inc word ptr [current_y]   ; Mover hacia abajo
     call dibujar_trazo
@@ -156,7 +186,7 @@ mover_abajo:
 
 mover_izquierda:
     ; Verificar si no se excede el borde izquierdo
-    cmp [current_x], 1 ; Comparamos con 1 para evitar que el píxel quede fuera de la pantalla
+    cmp [current_x], 136 ; Comparamos con 1 para evitar que el píxel quede fuera de la pantalla
     jle main_loop
     dec word ptr [current_x] ; Mover hacia la izquierda
     call dibujar_trazo
@@ -164,7 +194,7 @@ mover_izquierda:
 
 mover_derecha:
     ; Verificar si no se excede el borde derecho
-    cmp [current_x], 638 ; Comparamos con 638 para evitar que el píxel quede fuera de la pantalla
+    cmp [current_x], 533 ; Comparamos con 638 para evitar que el píxel quede fuera de la pantalla
     jge main_loop
     inc word ptr [current_x] ; Mover hacia la derecha
     call dibujar_trazo
@@ -179,7 +209,11 @@ dibujar_trazo:
 
 ; Salir del programa
 salir:
+    ; Restaurar el modo de texto 03h
+    mov ax, 0003h
+    int 10h
+    ; Terminar el programa
     mov ah, 4Ch
     int 21h
 
-end start
+END start

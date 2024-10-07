@@ -1,2 +1,6 @@
 *.bat
 *.exe
+*.obj
+*.EXE
+*.OBJ
+*.BAT

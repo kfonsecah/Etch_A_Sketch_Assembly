@@ -10,15 +10,6 @@
 
 .CODE
 
-; Macro para dibujar un píxel en la pantalla en modo gráfico
-PINTA_PIXEL macro x, y, color
-    mov ah, 0Ch
-    mov al, color
-    mov bh, 0
-    mov cx, x
-    mov dx, y
-    int 10h
-endm
 
 ; Inicializar el mouse
 INIT_MOUSE PROC

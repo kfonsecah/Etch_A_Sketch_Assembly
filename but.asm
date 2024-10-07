@@ -154,8 +154,12 @@ DIBUJAR_MOUSE_PIXEL ENDP
 
 ; Mover el píxel con las teclas WASD, dejando un trazo
 MOVER_PIXEL PROC
-    mov ah, 00h
+    mov ah, 01h              ; Verificar si hay tecla presionada
     int 16h
+    jz no_key_pressed        ; Si no hay tecla presionada, no hacer nada
+
+    mov ah, 00h
+    int 16h                  ; Leer la tecla presionada
     cmp al, 'w'
     je mover_arriba
     cmp al, 's'
@@ -165,7 +169,7 @@ MOVER_PIXEL PROC
     cmp al, 'd'
     je mover_derecha
     cmp al, 27
-    jmp salir  ; En lugar de je salir
+    jmp salir                ; Salir si se presiona Esc
 
     ret
 
@@ -203,6 +207,9 @@ dibujar_trazo:
 
 no_move:
     ret
+
+no_key_pressed:
+    ret
 MOVER_PIXEL ENDP
 
 start:
@@ -230,8 +237,12 @@ start:
     call INIT_MOUSE
 
 main_loop:
+    ; Detectar clic del mouse y pintar
     call DIBUJAR_MOUSE_PIXEL
+    
+    ; Control de teclas (WASD)
     call MOVER_PIXEL
+
     jmp main_loop
 
 salir:

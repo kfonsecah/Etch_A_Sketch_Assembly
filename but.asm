@@ -6,8 +6,8 @@
     mouse_y dw 0          ; Coordenada Y del mouse
     mouse_buttons db 0    ; Estado de los botones del mouse
     color_pixel db 1      ; Color por defecto del píxel
-    current_x dw 320      ; Coordenada X actual del píxel
-    current_y dw 240      ; Coordenada Y actual del píxel
+    current_x dw 65535    ; Coordenada X inicial (valor fuera de la pantalla)
+    current_y dw 65535    ; Coordenada Y inicial (valor fuera de la pantalla)
     square_1_color db 0Fh ; Color del primer cuadrado
     square_2_color db 04h ; Color del segundo cuadrado
     square_3_color db 0Ah ; Color del tercer cuadrado
@@ -117,6 +117,7 @@ VERIFICAR_AREA_DIBUJO PROC
     jb no_click_dibujo       ; Si está arriba, no permitir dibujo
     cmp [mouse_y], 400       ; Verificar si mouse_y está abajo del límite
     ja no_click_dibujo       ; Si está abajo, no permitir dibujo
+    mov ax, 1                ; Si está dentro, permitir dibujo
     ret                      ; Si está dentro, permitir dibujo
 
 no_click_dibujo:
@@ -135,8 +136,8 @@ DIBUJAR_MOUSE_PIXEL PROC
 
     ; Verificar si el clic está dentro del área de dibujo
     call VERIFICAR_AREA_DIBUJO
-    cmp ax, 0
-    je no_click_mouse  ; Si ax es 0, no pintar
+    cmp ax, 1
+    jne no_click_mouse  ; Si ax no es 1, no pintar
 
     ; Guardar la posición del clic como la nueva posición del píxel
     mov ax, [mouse_x]

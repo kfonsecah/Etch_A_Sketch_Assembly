@@ -5,14 +5,21 @@
     mouse_x dw 0          ; Coordenada X del mouse
     mouse_y dw 0          ; Coordenada Y del mouse
     mouse_buttons db 0    ; Estado de los botones del mouse
-    mensaje db 'Click detectado en: $'
-    coord_x_msg db 'X: $'
-    coord_y_msg db 'Y: $'
-    nueva_linea db 13, 10, '$'
-    no_mouse_msg db 'No hay mouse presente. $'  ; Mensaje si no hay mouse
-    buffer db 6, '$'       ; Buffer para mostrar las coordenadas
+    color_pixel db 1      ; Color por defecto del píxel
+    current_x dw 320      ; Coordenada X actual del píxel
+    current_y dw 240      ; Coordenada Y actual del píxel
 
 .CODE
+
+; Macro para dibujar un píxel en la pantalla en modo gráfico
+PINTA_PIXEL macro x, y, color
+    mov ah, 0Ch
+    mov al, color
+    mov bh, 0
+    mov cx, x
+    mov dx, y
+    int 10h
+endm
 
 ; Inicializar el mouse
 INIT_MOUSE PROC
@@ -23,9 +30,11 @@ INIT_MOUSE PROC
     ret
 
 NO_MOUSE:
-    ; Mostrar mensaje de que no hay mouse presente
-    mov dx, OFFSET no_mouse_msg
-    call PRINT_MESSAGE
+    ; Si el mouse no está presente, salir al modo texto
+    mov ax, 0003h
+    int 10h
+    mov ah, 4Ch
+    int 21h
     ret
 INIT_MOUSE ENDP
 
@@ -39,112 +48,113 @@ GET_MOUSE_STATUS PROC
     ret
 GET_MOUSE_STATUS ENDP
 
-; Imprimir un mensaje en pantalla usando ah=09h (cadena terminada en '$')
-PRINT_MESSAGE PROC
-    mov ah, 09h               ; Función para imprimir cadena de caracteres
-    int 21h
+; Dibujar el píxel en la nueva posición del mouse
+DIBUJAR_MOUSE_PIXEL PROC
+    call GET_MOUSE_STATUS    ; Obtener las coordenadas del mouse
+
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz no_click             ; Si no fue presionado, saltar a no_click
+
+    ; Guardar la posición del clic como la nueva posición del píxel
+    mov ax, [mouse_x]        ; Mover mouse_x a ax
+    mov [current_x], ax      ; Guardar en current_x
+    mov ax, [mouse_y]        ; Mover mouse_y a ax
+    mov [current_y], ax      ; Guardar en current_y
+
+    ; Dibujar el píxel en la nueva posición del mouse
+    PINTA_PIXEL [current_x], [current_y], [color_pixel]
+
+    ; Cambiar el color del píxel cada vez que se haga clic
+    inc color_pixel
+    cmp color_pixel, 0Fh    ; Limitar el color a 15 (máximo 16 colores en modo 12h)
+    jbe continuar
+    mov color_pixel, 1      ; Reiniciar el color si sobrepasa el límite
+
+continuar:
     ret
-PRINT_MESSAGE ENDP
 
-; Convertir un número en el rango 0-65535 a ASCII y mostrarlo
-PRINT_NUMBER PROC
-    push ax
-    push bx
-    push cx
-    push dx
-
-    xor cx, cx          ; Limpiar contador de dígitos
-
-convert_loop:
-    mov bx, 10
-    xor dx, dx          ; Limpia dx para la división
-    div bx              ; Divide ax entre 10
-    add dl, '0'         ; Convierte el número a carácter ASCII
-    push dx             ; Guarda el dígito en la pila
-    inc cx              ; Incrementa el contador de dígitos
-    test ax, ax         ; Verifica si ax es 0
-    jnz convert_loop    ; Si no es 0, continuar
-
-print_digits:
-    pop dx              ; Recuperar los dígitos
-    mov ah, 02h         ; Función para imprimir un solo carácter
-    mov dl, al          ; El carácter a imprimir
-    int 21h             ; Llamada a DOS para imprimir el carácter
-    loop print_digits   ; Imprimir todos los dígitos
-
-    pop dx
-    pop cx
-    pop bx
-    pop ax
+no_click:
     ret
-PRINT_NUMBER ENDP
+DIBUJAR_MOUSE_PIXEL ENDP
 
-; Mostrar las coordenadas del mouse
-DISPLAY_COORDINATES PROC
-    ; Mostrar mensaje de click detectado
-    mov dx, OFFSET mensaje
-    call PRINT_MESSAGE
-
-    ; Mostrar coordenada X
-    mov dx, OFFSET coord_x_msg
-    call PRINT_MESSAGE
-
-    mov ax, [mouse_x]       ; Cargar la coordenada X del mouse
-    call PRINT_NUMBER       ; Mostrar la coordenada X
-
-    ; Nueva línea
-    mov dx, OFFSET nueva_linea
-    call PRINT_MESSAGE
-
-    ; Mostrar coordenada Y
-    mov dx, OFFSET coord_y_msg
-    call PRINT_MESSAGE
-
-    mov ax, [mouse_y]       ; Cargar la coordenada Y del mouse
-    call PRINT_NUMBER       ; Mostrar la coordenada Y
-
-    ; Nueva línea
-    mov dx, OFFSET nueva_linea
-    call PRINT_MESSAGE
-
+; Mover el píxel con las teclas WASD, dejando un trazo
+MOVER_PIXEL PROC
+    mov ah, 00h              ; Leer la tecla presionada
+    int 16h
+    cmp al, 'w'              ; Tecla W - Mover arriba
+    je mover_arriba
+    cmp al, 's'              ; Tecla S - Mover abajo
+    je mover_abajo
+    cmp al, 'a'              ; Tecla A - Mover izquierda
+    je mover_izquierda
+    cmp al, 'd'              ; Tecla D - Mover derecha
+    je mover_derecha
+    cmp al, 27               ; Comparar con Esc (código ASCII 27)
+    je salir                 ; Salir si se presiona Esc
     ret
-DISPLAY_COORDINATES ENDP
+
+mover_arriba:
+    cmp [current_y], 1         ; Evitar moverse fuera de la pantalla
+    jle no_move
+    dec word ptr [current_y]
+    call dibujar_trazo
+    ret
+
+mover_abajo:
+    cmp [current_y], 478       ; Evitar moverse fuera de la pantalla
+    jge no_move
+    inc word ptr [current_y]
+    call dibujar_trazo
+    ret
+
+mover_izquierda:
+    cmp [current_x], 1         ; Evitar moverse fuera de la pantalla
+    jle no_move
+    dec word ptr [current_x]
+    call dibujar_trazo
+    ret
+
+mover_derecha:
+    cmp [current_x], 638       ; Evitar moverse fuera de la pantalla
+    jge no_move
+    inc word ptr [current_x]
+    call dibujar_trazo
+    ret
+
+dibujar_trazo:
+    PINTA_PIXEL [current_x], [current_y], [color_pixel]
+    ret
+
+no_move:
+    ret
+MOVER_PIXEL ENDP
 
 start:
-    ; Cambiar a modo texto 03h (80x25 caracteres, 16 colores)
-    mov ax, 0003h
+    ; Inicializar segmentos de datos
+    mov ax, @data
+    mov ds, ax
+
+    ; Cambiar a modo gráfico 12h (640x480, 16 colores)
+    mov ax, 0012h
     int 10h
+
+
 
     ; Inicializar el mouse
     call INIT_MOUSE
 
 main_loop:
-    ; Obtener las coordenadas y el estado del mouse
-    call GET_MOUSE_STATUS
+    call DIBUJAR_MOUSE_PIXEL  ; Dibujar el píxel si hay un clic
+    call MOVER_PIXEL          ; Mover el píxel con WASD dejando un rastro
 
-    ; Verificar si el botón izquierdo del mouse fue presionado
-    test [mouse_buttons], 1   ; Verificar si el botón izquierdo está presionado
-    jz no_click               ; Si no está presionado, continuar el ciclo
+    jmp main_loop    ; Volver al bucle principal
 
-    ; Si hubo un clic, mostrar las coordenadas
-    call DISPLAY_COORDINATES
-
-    ; Esperar hasta que se suelte el botón antes de continuar
-wait_for_release:
-    call GET_MOUSE_STATUS
-    test [mouse_buttons], 1   ; Verificar si el botón izquierdo sigue presionado
-    jnz wait_for_release      ; Si todavía está presionado, esperar
-
-no_click:
-    ; Continuar verificando el mouse
-    jmp main_loop
-
-; Restaurar el modo de texto y salir
 salir:
+    ; Restaurar el modo de texto 03h
     mov ax, 0003h
     int 10h
     ; Terminar el programa
     mov ah, 4Ch
     int 21h
-
 END start

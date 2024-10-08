@@ -40,6 +40,22 @@ COLUMNAS_CUADRADO:
     jb FILAS_CUADRADO
 endm
 
+; MACRO para verificar si el clic está dentro de un cuadrado y cambiar el color
+VERIFICAR_CUADRADO macro x_min, x_max, y_min, y_max, color
+    local FUERA_CUADRADO, DENTRO_CUADRADO
+    cmp [mouse_x], x_min
+    jb FUERA_CUADRADO
+    cmp [mouse_x], x_max
+    ja FUERA_CUADRADO
+    cmp [mouse_y], y_min
+    jb FUERA_CUADRADO
+    cmp [mouse_y], y_max
+    ja FUERA_CUADRADO
+    mov al, color          ; Cambiar el color si está dentro del cuadrado
+    mov [color_pixel], al
+FUERA_CUADRADO:
+endm
+
 ; Inicializar el mouse
 INIT_MOUSE PROC
     mov ax, 0
@@ -66,47 +82,6 @@ GET_MOUSE_STATUS PROC
     ret
 GET_MOUSE_STATUS ENDP
 
-; Verificar clic en los cuadrados de color
-VERIFICAR_CUADRADOS PROC
-    ; Cuadrado 1
-    cmp [mouse_x], 500
-    jb no_click
-    cmp [mouse_x], 530
-    ja verificar_cuadrado_2
-    cmp [mouse_y], 100
-    jb no_click
-    cmp [mouse_y], 130
-    ja verificar_cuadrado_2
-    mov al, [square_1_color]  ; Cambiar el color al del cuadrado 1
-    mov [color_pixel], al
-    jmp continuar
-
-verificar_cuadrado_2:
-    ; Cuadrado 2
-    cmp [mouse_y], 150
-    jb no_click
-    cmp [mouse_y], 180
-    ja verificar_cuadrado_3
-    mov al, [square_2_color]  ; Cambiar el color al del cuadrado 2
-    mov [color_pixel], al
-    jmp continuar
-
-verificar_cuadrado_3:
-    ; Cuadrado 3
-    cmp [mouse_y], 200
-    jb no_click
-    cmp [mouse_y], 230
-    ja no_click
-    mov al, [square_3_color]  ; Cambiar el color al del cuadrado 3
-    mov [color_pixel], al
-    jmp continuar
-
-no_click:
-    ret
-continuar:
-    ret
-VERIFICAR_CUADRADOS ENDP
-
 ; Verificar si el clic está dentro del área de dibujo (cuadro en 100, 300 de 100x100)
 VERIFICAR_AREA_DIBUJO PROC
     cmp [mouse_x], 100       ; Verificar si mouse_x está a la izquierda del límite
@@ -128,7 +103,11 @@ VERIFICAR_AREA_DIBUJO ENDP
 ; Dibujar el píxel en la nueva posición del mouse
 DIBUJAR_MOUSE_PIXEL PROC
     call GET_MOUSE_STATUS
-    call VERIFICAR_CUADRADOS
+
+    ; Verificar los cuadrados de colores usando la macro VERIFICAR_CUADRADO
+    VERIFICAR_CUADRADO 500, 530, 100, 130, [square_1_color]
+    VERIFICAR_CUADRADO 500, 530, 150, 180, [square_2_color]
+    VERIFICAR_CUADRADO 500, 530, 200, 230, [square_3_color]
 
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1

@@ -2,8 +2,8 @@
 .STACK 100h
 
 .DATA
-    current_x dw 320         ; Coordenada X inicial (centro de la pantalla)
-    current_y dw 240         ; Coordenada Y inicial (centro de la pantalla)
+    current_x dw 65535    ; Coordenada X inicial (valor fuera de la pantalla)
+    current_y dw 65535         ; Coordenada Y inicial (centro de la pantalla)
     color_pixel db 00h  
     mensaje1 db ' Limpiar ', 0  ; Texto 1 a mostrar
     mensaje2 db ' Dibujo sin nombre ', 0  
@@ -11,7 +11,26 @@
     mensaje4 db ' Cargar Bosquejo ', 0 
     mensaje5 db ' Campo de texto ', 0 
     mensaje6 db ' Insertar imagen ', 0 
+    
+    
+    mouse_x dw 0          ; Coordenada X del mouse
+    mouse_y dw 0          ; Coordenada Y del mouse
 
+    mouse_buttons db 0    ; Estado de los botones del mouse
+
+    square_1_color db 01h ; Color del primer cuadrado
+    square_2_color db 02h ; Color del segundo cuadrado
+    square_3_color db 04h ; Color del tercer cuadrado
+    square_4_color db 05h 
+    square_5_color db 06h
+    square_6_color db 07h  
+
+    square_7_color db 08h ; Color del primer cuadrado
+    square_8_color db 09h ; Color del segundo cuadrado
+    square_9_color db 0Ah ; Color del tercer cuadrado
+    square_10_color db 0Bh 
+    square_11_color db 0Ch
+    square_12_color db 0Dh 
 
 ; Macro para dibujar un píxel en la pantalla
 PINTA_PIXEL macro x, y, color
@@ -90,7 +109,171 @@ IMPRIMIR_CADENA:
 FIN:
 endm
 
+; MACRO para verificar si el clic está dentro de un cuadrado y cambiar el color
+VERIFICAR_CUADRADO macro x_min, x_max, y_min, y_max, color
+    local FUERA_CUADRADO, DENTRO_CUADRADO
+    cmp [mouse_x], x_min
+    jb FUERA_CUADRADO
+    cmp [mouse_x], x_max
+    ja FUERA_CUADRADO
+    cmp [mouse_y], y_min
+    jb FUERA_CUADRADO
+    cmp [mouse_y], y_max
+    ja FUERA_CUADRADO
+    mov al, color          ; Cambiar el color si está dentro del cuadrado
+    mov [color_pixel], al
+FUERA_CUADRADO:
+endm
+
 .CODE
+
+; Inicializar el mouse
+INIT_MOUSE PROC
+    mov ax, 0
+    int 33h
+    cmp ax, 0
+    je NO_MOUSE
+    ret
+
+NO_MOUSE:
+    mov ax, 0003h
+    int 10h
+    mov ah, 4Ch
+    int 21h
+    ret
+INIT_MOUSE ENDP
+
+; Obtener las coordenadas del mouse y el estado de los botones
+GET_MOUSE_STATUS PROC
+    mov ax, 03h
+    int 33h
+    mov [mouse_buttons], bl
+    mov [mouse_x], cx
+    mov [mouse_y], dx
+    ret
+GET_MOUSE_STATUS ENDP
+
+; Verificar si el clic está dentro del área de dibujo (cuadro en 100, 300 de 100x100)
+VERIFICAR_AREA_DIBUJO PROC
+    cmp [mouse_x], 136       ; Verificar si mouse_x está a la izquierda del límite del cuadro de dibujo
+    jb no_click_dibujo       ; Si está a la izquierda, no permitir dibujo
+    cmp [mouse_x], 533       ; Verificar si mouse_x está a la derecha del límite del cuadro de dibujo
+    ja no_click_dibujo       ; Si está a la derecha, no permitir dibujo
+    cmp [mouse_y], 90       ; Verificar si mouse_y está arriba del límite del cuadro de dibujo
+    jb no_click_dibujo       ; Si está arriba, no permitir dibujo
+    cmp [mouse_y], 389     ; Verificar si mouse_y está abajo del límite del cuadro de dibujo
+    ja no_click_dibujo       ; Si está abajo, no permitir dibujo
+    mov ax, 1                ; Si está dentro, permitir dibujo
+    ret                      ; Si está dentro, permitir dibujo
+
+no_click_dibujo:
+    mov ax, 0                ; Si está fuera, bloquear el dibujo
+    ret
+VERIFICAR_AREA_DIBUJO ENDP
+
+; Dibujar el píxel en la nueva posición del mouse
+DIBUJAR_MOUSE_PIXEL PROC
+    call GET_MOUSE_STATUS
+
+    ; Verificar los cuadrados de colores usando la macro VERIFICAR_CUADRADO
+    VERIFICAR_CUADRADO 564, 594, 350, 380, [square_1_color];AZUL
+    VERIFICAR_CUADRADO 564, 594, 300, 330, [square_2_color]
+    VERIFICAR_CUADRADO 564, 594, 250, 280, [square_3_color]
+    VERIFICAR_CUADRADO 564, 594, 200, 230, [square_4_color]
+    VERIFICAR_CUADRADO 564, 594, 150, 180, [square_5_color]
+    VERIFICAR_CUADRADO 564, 594, 100, 130, [square_6_color]
+
+    VERIFICAR_CUADRADO 75, 105, 350, 380, [square_7_color]
+    VERIFICAR_CUADRADO 75, 105, 300, 330, [square_8_color]
+    VERIFICAR_CUADRADO 75, 105, 250, 280, [square_9_color]
+    VERIFICAR_CUADRADO 75, 105, 200, 230, [square_10_color]
+    VERIFICAR_CUADRADO 75, 105, 150, 180, [square_11_color]
+    VERIFICAR_CUADRADO 75, 105, 100, 130, [square_12_color]
+
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz no_click_mouse
+
+    ; Verificar si el clic está dentro del área de dibujo
+    call VERIFICAR_AREA_DIBUJO
+    cmp ax, 1
+    jne no_click_mouse  ; Si ax no es 1, no pintar
+
+    ; Guardar la posición del clic como la nueva posición del píxel
+    mov ax, [mouse_x]
+    mov [current_x], ax
+    mov ax, [mouse_y]
+    mov [current_y], ax
+
+    ; Dibujar el píxel en la nueva posición
+    PINTA_PIXEL [current_x], [current_y], [color_pixel]
+
+no_click_mouse:
+    ret
+DIBUJAR_MOUSE_PIXEL ENDP
+
+; Mover el píxel con las teclas WASD, dejando un trazo
+MOVER_PIXEL PROC
+    mov ah, 01h              ; Verificar si hay tecla presionada
+    int 16h
+    jz no_key_pressed        ; Si no hay tecla presionada, no hacer nada
+
+    mov ah, 00h
+    int 16h                  ; Leer la tecla presionada
+    cmp al, 'w'
+    je mover_arriba
+    cmp al, 's'
+    je mover_abajo
+    cmp al, 'a'
+    je mover_izquierda
+    cmp al, 'd'
+    je mover_derecha
+    cmp al, 27
+    jmp salir                ; Salir si se presiona Esc
+
+    ret
+
+mover_arriba:
+    cmp [current_y], 90
+    jle no_move
+    dec word ptr [current_y]
+    call dibujar_trazo
+    ret
+
+mover_abajo:
+    cmp [current_y], 389
+    jge no_move
+    inc word ptr [current_y]
+    call dibujar_trazo
+    ret
+
+mover_izquierda:
+    cmp [current_x], 136
+    jle no_move
+    dec word ptr [current_x]
+    call dibujar_trazo
+    ret
+
+mover_derecha:
+    cmp [current_x], 533
+    jge no_move
+    inc word ptr [current_x]
+    call dibujar_trazo
+    ret
+
+dibujar_trazo:
+    PINTA_PIXEL [current_x], [current_y], [color_pixel]
+    ret
+
+no_move:
+    ret
+
+no_key_pressed:
+    ret
+MOVER_PIXEL ENDP
+
+
+
 start:
     ; Inicializar segmentos de datos
     mov ax, @data
@@ -121,10 +304,10 @@ start:
 
     DIBUJAR_CUADRADO 75, 350, 30, 08h ; Primer cuadrado rojo
     DIBUJAR_CUADRADO 75, 300, 30, 09h ; Segundo cuadrado
-    DIBUJAR_CUADRADO 75, 250, 30, 10h ; Tercer cuadrado
-    DIBUJAR_CUADRADO 75, 200, 30, 11h ; Cuarto cuadrado
-    DIBUJAR_CUADRADO 75, 150, 30, 0Ah ; Quinto cuadrado
-    DIBUJAR_CUADRADO 75, 100, 30, 0Bh ; Sexto cuadrado
+    DIBUJAR_CUADRADO 75, 250, 30, 0Ah ; Tercer cuadrado
+    DIBUJAR_CUADRADO 75, 200, 30, 0Bh ; Cuarto cuadrado
+    DIBUJAR_CUADRADO 75, 150, 30, 0Ch ; Quinto cuadrado
+    DIBUJAR_CUADRADO 75, 100, 30, 0Dh ; Sexto cuadrado
 
     DIBUJAR_CUADRADO 564, 410, 30, 0Fh ;tecla arriba
     DIBUJAR_CUADRADO 564, 445, 30, 0Fh ;tecla ABAJO
@@ -144,70 +327,17 @@ start:
     IMPRIMIR_TEXTO 26, 28, mensaje5, 2Fh  ;Campo de texto
     IMPRIMIR_TEXTO 26, 54, mensaje6, 2Fh  ;Campo de texto
     
+call INIT_MOUSE
 
 
 main_loop:
-    ; Leer la tecla presionada (sin esperar)
-    mov ah, 00h
-    int 16h
+    ; Detectar clic del mouse y pintar
+    call DIBUJAR_MOUSE_PIXEL
+    
+    ; Control de teclas (WASD)
+    call MOVER_PIXEL
 
-    ; Comparar las teclas 'W', 'A', 'S', 'D' por sus códigos ASCII
-    cmp al, 'w'
-    je mover_arriba
-
-    cmp al, 's'
-    je mover_abajo
-
-    cmp al, 'a'
-    je mover_izquierda
-
-    cmp al, 'd'
-    je mover_derecha
-
-    cmp al, 27       ; Comparar con Esc (código ASCII 27)
-    je salir         ; Salir si se presiona Esc
-
-    jmp main_loop    ; Volver al bucle principal
-
-; Funciones de movimiento
-mover_arriba:
-    cmp [current_y], 90         ; Verificar si no se excede el borde superior
-    jle main_loop              ; Si está en el borde, no mover más arriba
-    dec word ptr [current_y]   ; Mover hacia arriba
-    call dibujar_trazo
     jmp main_loop
-
-mover_abajo:
-    cmp [current_y], 389       ; Verificar si no se excede el borde inferior
-    jge main_loop              ; Si está en el borde, no mover más abajo
-    inc word ptr [current_y]   ; Mover hacia abajo
-    call dibujar_trazo
-    jmp main_loop
-
-mover_izquierda:
-    ; Verificar si no se excede el borde izquierdo
-    cmp [current_x], 136 ; Comparamos con 1 para evitar que el píxel quede fuera de la pantalla
-    jle main_loop
-    dec word ptr [current_x] ; Mover hacia la izquierda
-    call dibujar_trazo
-    jmp main_loop
-
-mover_derecha:
-    ; Verificar si no se excede el borde derecho
-    cmp [current_x], 533 ; Comparamos con 638 para evitar que el píxel quede fuera de la pantalla
-    jge main_loop
-    inc word ptr [current_x] ; Mover hacia la derecha
-    call dibujar_trazo
-    jmp main_loop
-
-; Dibuja el píxel en la nueva posición
-dibujar_trazo:
-    mov ax, [current_x]        ; Cargar la nueva coordenada X en AX
-    mov dx, [current_y]        ; Cargar la nueva coordenada Y en DX
-     PINTA_PIXEL [current_x], [current_y], color_pixel ; Llamar a la macro con los valores correctos
-    ret
-
-; Salir del programa
 salir:
     ; Restaurar el modo de texto 03h
     mov ax, 0003h

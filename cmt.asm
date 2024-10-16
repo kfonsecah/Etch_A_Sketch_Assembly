@@ -2,9 +2,11 @@
 .STACK 100h
 
 .DATA
-    current_x dw 65535    
-    current_y dw 65535    
+    current_x dw 65535 ; Coordenada X inicial (valor fuera de la pantalla)   
+    current_y dw 65535; Coordenada Y inicial (valor fuera de la pantalla)    
     color_pixel db 00h  
+
+    ; Mensajes que se mostrarán en pantalla
     mensaje1 db ' Limpiar ', 0
     mensaje2 db ' Dibujo sin nombre ', 0  
     mensaje3 db ' Guardar Bosquejo ', 0 
@@ -12,9 +14,12 @@
     mensaje5 db ' Campo de texto ', 0 
     mensaje6 db ' Insertar imagen ', 0 
     
-    mouse_x dw 0          
-    mouse_y dw 0          
-    mouse_buttons db 0    
+    ; Coordenadas y estado del mouse
+    mouse_x dw 0          ; Coordenada X del mouse
+    mouse_y dw 0          ; Coordenada Y del mouse
+    mouse_buttons db 0    ; Estado de los botones del mouse (presionado o no)
+
+    ; Colores de los cuadrados de colores que se dibujan en la pantalla
     square_1_color db 01h 
     square_2_color db 02h 
     square_3_color db 04h 

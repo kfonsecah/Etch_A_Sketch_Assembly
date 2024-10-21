@@ -30,7 +30,7 @@
     square_9_color db 0Ah ; Color del tercer cuadrado
     square_10_color db 0Bh 
     square_11_color db 0Ch
-    square_12_color db 0Dh 
+    square_12_color db 0Fh 
 
 ; Macro para dibujar un píxel en la pantalla
 PINTA_PIXEL macro x, y, color
@@ -127,12 +127,14 @@ endm
 
 .CODE
 
-; Inicializar el mouse
+; Inicializar el mouse y mostrar el cursor
 INIT_MOUSE PROC
-    mov ax, 0
+    mov ax, 0              ; Inicializar el mouse
     int 33h
-    cmp ax, 0
-    je NO_MOUSE
+    cmp ax, 0              ; Verificar si el mouse está presente
+    je NO_MOUSE            ; Si no está presente, salir
+    mov ax, 1              ; Mostrar el cursor del mouse
+    int 33h
     ret
 
 NO_MOUSE:
@@ -143,15 +145,36 @@ NO_MOUSE:
     ret
 INIT_MOUSE ENDP
 
+
+; Esconder el cursor del mouse
+ESCONDER_MOUSE PROC
+    mov ax, 02h            ; Llamada a la función para esconder el cursor
+    int 33h
+    ret
+ESCONDER_MOUSE ENDP
+
+; Mostrar el cursor del mouse
+MOSTRAR_MOUSE PROC
+    mov ax, 01h            ; Llamada a la función para mostrar el cursor
+    int 33h
+    ret
+MOSTRAR_MOUSE ENDP
+
+
+
 ; Obtener las coordenadas del mouse y el estado de los botones
 GET_MOUSE_STATUS PROC
-    mov ax, 03h
+    mov ax, 03h            ; Obtener las coordenadas del mouse
     int 33h
     mov [mouse_buttons], bl
     mov [mouse_x], cx
     mov [mouse_y], dx
+
+    ; Dibujar un píxel en la posición del mouse para representarlo
+      ; Dibuja el cursor como un píxel blanco
     ret
 GET_MOUSE_STATUS ENDP
+
 
 ; Verificar si el clic está dentro del área de dibujo (cuadro en 100, 300 de 100x100)
 VERIFICAR_AREA_DIBUJO PROC
@@ -287,12 +310,12 @@ start:
 
     ; Dibujar el primer píxel en la posición inicial
    
-    DIBUJAR_RECTANGULO 60, 50, 360, 30, 0Fh
-    DIBUJAR_RECTANGULO 425, 50, 110, 30, 0Fh
-    ; Dibuja un rectángulo en las coordenadas especificadas
-    DIBUJAR_RECTANGULO 550, 90, 60, 300, 0Fh  
+    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h;Nombre Dibujo
+    DIBUJAR_RECTANGULO 425, 42, 110, 30, 00h;Limpiar btn
+  
+    DIBUJAR_RECTANGULO 550, 90, 60, 300, 00h  
 	DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ;Cuadro de dibujo
-    DIBUJAR_RECTANGULO 60, 90, 60, 300, 0Fh
+    DIBUJAR_RECTANGULO 60, 90, 60, 300, 00h
 
  
     DIBUJAR_CUADRADO 564, 350, 30, 01h ; Primer cuadrado rojo
@@ -307,25 +330,25 @@ start:
     DIBUJAR_CUADRADO 75, 250, 30, 0Ah ; Tercer cuadrado
     DIBUJAR_CUADRADO 75, 200, 30, 0Bh ; Cuarto cuadrado
     DIBUJAR_CUADRADO 75, 150, 30, 0Ch ; Quinto cuadrado
-    DIBUJAR_CUADRADO 75, 100, 30, 0Dh ; Sexto cuadrado
+    DIBUJAR_CUADRADO 75, 100, 30, 0Fh ; Sexto cuadrado
 
-    DIBUJAR_CUADRADO 564, 410, 30, 0Fh ;tecla arriba
+   
     DIBUJAR_CUADRADO 564, 445, 30, 0Fh ;tecla ABAJO
     DIBUJAR_CUADRADO 529, 445, 30, 0Fh ;tecla IZQ
     DIBUJAR_CUADRADO 600, 445, 30, 0Fh ;tecla DER
 
 
-    DIBUJAR_RECTANGULO 60, 400, 100, 30, 0Fh
-    DIBUJAR_RECTANGULO 60, 435, 100, 30, 0Fh
-    DIBUJAR_RECTANGULO 167, 400, 255, 30, 0Fh;CAMPO TEXTO
-    DIBUJAR_RECTANGULO 430, 400, 105, 30, 0Fh;
+    DIBUJAR_RECTANGULO 15, 410, 150, 30, 00h ;Guardar Bosquejo btn
+    DIBUJAR_RECTANGULO 15, 445, 150, 30, 00h
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
+    DIBUJAR_RECTANGULO 465, 410, 145, 30, 00h; Insertar imagen
 
-    IMPRIMIR_TEXTO  4, 54, mensaje1, 1Fh  ;Limpiar
-    IMPRIMIR_TEXTO 4, 20, mensaje2, 2Fh   ;Dibujo sin nombre
-    IMPRIMIR_TEXTO  26, 7, mensaje3, 1Fh  ;Guardar Bosquejo
-    IMPRIMIR_TEXTO 28, 7, mensaje4, 2Fh  ;Cargar Bosquejo
-    IMPRIMIR_TEXTO 26, 28, mensaje5, 2Fh  ;Campo de texto
-    IMPRIMIR_TEXTO 26, 54, mensaje6, 2Fh  ;Campo de texto
+    IMPRIMIR_TEXTO  3, 55, mensaje1, 1Fh  ;Limpiar
+    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh   ;Dibujo sin nombre
+    IMPRIMIR_TEXTO  26, 2, mensaje3, 1Fh  ;Guardar Bosquejo
+    IMPRIMIR_TEXTO 28, 2, mensaje4, 2Fh  ;Cargar Bosquejo
+    IMPRIMIR_TEXTO 26, 32, mensaje5, 2Fh  ;Campo de texto
+    IMPRIMIR_TEXTO 26, 59, mensaje6, 2Fh  ;Campo de texto
     
 call INIT_MOUSE
 

@@ -12,6 +12,11 @@
     mensaje5 db ' Campo de texto ', 0 
     mensaje6 db ' Insertar imagen ', 0 
     
+
+    buffer db 32 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
+    buffer_length dw 0     ; Longitud actual del texto en el buffer
+    capture_enabled db 0  ; 0 = No capturar, 1 = Capturar entrada
+
     
     mouse_x dw 0          ; Coordenada X del mouse
     mouse_y dw 0          ; Coordenada Y del mouse
@@ -145,6 +150,31 @@ VERIFICAR_LIMPIAR macro
 
 fuera_limpiar:
 endm
+
+; Macro para verificar si el clic está en el campo de texto
+VERIFICAR_CAMPO_TEXTO macro
+    cmp [mouse_x], 175
+    jb fuera_campo_texto
+    cmp [mouse_x], 455     ; Limite derecho del área del campo de texto
+    ja fuera_campo_texto
+    cmp [mouse_y], 410
+    jb fuera_campo_texto
+    cmp [mouse_y], 440     ; Limite inferior del área del campo de texto
+    ja fuera_campo_texto
+
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz fuera_campo_texto
+
+    ; Activar la captura de texto
+    mov [capture_enabled], 1
+    jmp fin_verificar
+
+fuera_campo_texto:
+    ; No desactivar captura de texto aquí, para que no se pierda la entrada mientras escribes
+fin_verificar:
+endm
+
 
 
 .CODE
@@ -316,7 +346,72 @@ no_move:
 no_key_pressed:
     ret
 MOVER_PIXEL ENDP
+CAPTURAR_ENTRADA PROC
+    cmp [capture_enabled], 1  ; Verificar si la captura está habilitada
+    jne no_key_pressed2       ; Si no está habilitada, salir
 
+    mov ah, 01h               ; Verificar si hay una tecla presionada
+    int 16h
+    jz no_key_pressed2        ; Si no hay tecla presionada, salir
+
+    mov ah, 00h
+    int 16h                   ; Leer la tecla presionada
+    cmp al, 13                ; Verificar si se presionó Enter (código ASCII 13)
+    je no_key_pressed2        ; Si es Enter, no hacer nada
+
+    cmp al, 8                 ; Verificar si se presionó Backspace (código ASCII 8)
+    je borrar_caracter
+
+    cmp [buffer_length], 32   ; Verificar si el buffer está lleno
+    jge no_key_pressed2       ; Si está lleno, no hacer nada
+
+    ; Guardar el carácter en el buffer
+    mov si, [buffer_length]
+    mov [buffer + si], al
+    inc word ptr [buffer_length]
+
+    ; Imprimir el texto actualizado
+    call IMPRIMIR_BUFFER
+    jmp no_key_pressed2
+
+borrar_caracter:
+    cmp [buffer_length], 0    ; Verificar si el buffer está vacío
+    je no_key_pressed2        ; Si está vacío, no hacer nada
+
+    dec word ptr [buffer_length]
+    mov si, [buffer_length]
+    mov byte ptr [buffer + si], ' '  ; Reemplazar con espacio en blanco
+    call IMPRIMIR_BUFFER
+    jmp no_key_pressed2
+
+no_key_pressed2:
+    ret
+CAPTURAR_ENTRADA ENDP
+
+IMPRIMIR_BUFFER PROC
+    ; Mueve el cursor a la posición del campo de texto (fila 26, columna 32)
+    mov ah, 02h
+    mov bh, 0
+    mov dh, 26              ; Fila 26, donde está el campo de texto
+    mov dl, 32              ; Columna 32
+    int 10h                 ; Llamada a BIOS para mover el cursor
+
+    ; Imprimir el contenido del buffer
+    mov si, offset buffer
+    mov cx, [buffer_length]  ; Imprimir solo el texto capturado
+IMPRIMIR_CARACTER:
+    lodsb                   ; Cargar el siguiente carácter en AL
+    cmp al, 0               ; Verificar fin del texto
+    je fin_impresion
+    mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
+    mov al, al              ; El carácter que se va a imprimir
+    mov bl, 0Fh             ; Cambiar el color del texto a blanco (o a un color que se vea)
+    int 10h
+    loop IMPRIMIR_CARACTER
+
+fin_impresion:
+    ret
+IMPRIMIR_BUFFER ENDP
 
 
 start:
@@ -379,8 +474,12 @@ main_loop:
     ; Detectar clic del mouse y pintar
     call DIBUJAR_MOUSE_PIXEL
 
-
+    VERIFICAR_CAMPO_TEXTO
     VERIFICAR_LIMPIAR
+
+    
+    ; Capturar entrada de texto
+    call CAPTURAR_ENTRADA
     
     ; Control de teclas (WASD)
     call MOVER_PIXEL

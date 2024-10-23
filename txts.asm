@@ -13,7 +13,7 @@
     mensaje6 db ' Insertar imagen ', 0 
     
 
-    buffer db 32 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
+    buffer db 100 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
     buffer_length dw 0     ; Longitud actual del texto en el buffer
     capture_enabled db 0  ; 0 = No capturar, 1 = Capturar entrada
 
@@ -366,10 +366,14 @@ CAPTURAR_ENTRADA PROC
     je no_key_pressed2        ; Si es Enter, no hacer nada
 
     cmp al, 8                 ; Verificar si se presionó Backspace (código ASCII 8)
-    je borrar_caracter
+    je borrar_caracter         ; Si es Backspace, ir a borrar carácter
 
-    cmp [buffer_length], 32   ; Verificar si el buffer está lleno
-    jge no_key_pressed2       ; Si está lleno, no hacer nada
+    cmp al, 27                ; Verificar si se presionó Esc (código ASCII 27)
+    je no_key_pressed2        ; Ignorar Esc para evitar salir
+
+    ; Verificar si el buffer está lleno
+    cmp [buffer_length], 10   ; Verificar si el buffer está lleno (máximo 15 caracteres)
+    jge no_key_pressed2       ; Si está lleno, no hacer nada y seguir en el loop
 
     ; Guardar el carácter en el buffer
     mov si, [buffer_length]
@@ -384,9 +388,14 @@ borrar_caracter:
     cmp [buffer_length], 0    ; Verificar si el buffer está vacío
     je no_key_pressed2        ; Si está vacío, no hacer nada
 
+    ; Reducir la longitud del buffer
     dec word ptr [buffer_length]
     mov si, [buffer_length]
-    mov byte ptr [buffer + si], ' '  ; Reemplazar con espacio en blanco
+    
+    ; Reemplazar el último carácter con un espacio en blanco
+    mov byte ptr [buffer + si], ' '
+
+    ; Imprimir el texto actualizado
     call IMPRIMIR_BUFFER
     jmp no_key_pressed2
 
@@ -399,6 +408,7 @@ no_key_pressed2:
 CAPTURAR_ENTRADA ENDP
 
 
+
 IMPRIMIR_BUFFER PROC
     ; Mueve el cursor a la posición del campo de texto (fila 26, columna 32)
     mov ah, 02h
@@ -407,7 +417,22 @@ IMPRIMIR_BUFFER PROC
     mov dl, 32              ; Columna 32
     int 10h                 ; Llamada a BIOS para mover el cursor
 
-    ; Imprimir el contenido del buffer
+    ; Borrar la línea completa del campo de texto
+    mov cx, 15              ; Longitud máxima del campo de texto
+    mov al, ' '             ; Carácter de espacio
+BORRAR_TEXTO:
+    mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
+    int 10h
+    loop BORRAR_TEXTO
+
+    ; Mueve el cursor a la posición inicial del campo de texto de nuevo
+    mov ah, 02h
+    mov bh, 0
+    mov dh, 26
+    mov dl, 32
+    int 10h
+
+    ; Imprimir el contenido actual del buffer
     mov si, offset buffer
     mov cx, [buffer_length]  ; Imprimir solo el texto capturado
 IMPRIMIR_CARACTER:
@@ -416,13 +441,14 @@ IMPRIMIR_CARACTER:
     je fin_impresion
     mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
     mov al, al              ; El carácter que se va a imprimir
-    mov bl, 0Ch             ; Cambiar el color del texto a blanco (o a un color que se vea)
+    mov bl, 0Ch             ; Cambiar el color del texto a blanco (o el color que prefieras)
     int 10h
     loop IMPRIMIR_CARACTER
 
 fin_impresion:
     ret
 IMPRIMIR_BUFFER ENDP
+
 
 
 start:

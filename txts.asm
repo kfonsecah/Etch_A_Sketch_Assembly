@@ -527,23 +527,23 @@ GUARDAR_BOSQUEJO PROC
     int 21h
 
     ; Abrir/crear archivo "bosquejo.txt" para escritura
-    mov ah, 3Ch         ; Función DOS 3Ch - Crear archivo
-    lea dx, nombre_archivo   ; Nombre del archivo
-    mov cx, 0           ; Atributos (archivo normal)
+    mov ah, 3Ch        ; Función DOS 3Ch - Crear archivo
+    lea dx, nombre_archivo   ; Dirección del nombre del archivo
+    mov cx, 0           ; Atributos del archivo (archivo normal)
     int 21h
-    jc error_guardar    ; Si hubo error, saltar al manejo de errores
+    jc error_guardar    ; Si hubo error, saltar a manejo de errores
     mov [file_handle], ax   ; Guardar el handle del archivo
 
-    ; Escribir datos fijos en el archivo para verificar que la escritura funciona
+    ; Escribir un mensaje de prueba para asegurar la escritura correcta
+    lea dx, mensaje_exito  ; "Archivo guardado!"
     mov ah, 40h
-    lea dx, mensaje_exito   ; Escribir un mensaje de prueba para verificar la escritura
     mov cx, 16             ; Longitud del mensaje
     int 21h
 
-    ; Recorrer el área de dibujo y guardar los colores en hexadecimal
-    mov cx, 90          ; Iniciar en y=90 (inicio del área de dibujo)
+    ; Recorrer el área de dibujo
+    mov cx, 90         ; Coordenada Y inicial
 guardar_filas:
-    mov dx, 136         ; Iniciar en x=136 (inicio del área de dibujo)
+    mov dx, 136        ; Coordenada X inicial
 guardar_columnas:
     ; Leer el color del píxel en la coordenada (dx, cx)
     mov ah, 0Dh         ; Función de BIOS para leer color del píxel
@@ -551,37 +551,24 @@ guardar_columnas:
 
     ; Verificar si el píxel no es del color de fondo
     cmp al, [fondo_color]
-    je skip_pixel       ; Saltar píxeles del color de fondo
+    je skip_pixel       ; Si es del color de fondo, saltar al siguiente
 
-    ; Convertir el color del píxel a su representación hexadecimal
+    ; Convertir el color a hexadecimal y guardarlo en el archivo
     call CONVERTIR_COLOR_HEX
-    ; Escribir el valor hexadecimal del color en el archivo
     mov ah, 40h
     lea dx, buffer
     mov cx, [buffer_length]
     int 21h
 
-    ; Escribir un espacio como separador de píxeles
-    mov ah, 40h
-    lea dx, coma
-    mov cx, 1
-    int 21h
-
 skip_pixel:
-    ; Incrementar las columnas
+    ; Incrementar columnas
     inc dx
-    cmp dx, 533         ; Hasta x=533 (límite del área de dibujo)
+    cmp dx, 533        ; Hasta x=533
     jbe guardar_columnas
 
-    ; Escribir un salto de línea después de cada fila de píxeles
-    mov ah, 40h
-    lea dx, salto_linea
-    mov cx, 2
-    int 21h
-
-    ; Incrementar las filas
+    ; Incrementar filas
     inc cx
-    cmp cx, 389         ; Hasta y=389 (límite del área de dibujo)
+    cmp cx, 389        ; Hasta y=389
     jbe guardar_filas
 
     ; Cerrar el archivo
@@ -596,40 +583,38 @@ skip_pixel:
     ret
 
 error_guardar:
-    ; Mostrar mensaje de error al abrir o crear el archivo
+    ; Mostrar mensaje de error si el archivo no se pudo abrir/crear
     lea dx, mensaje_error
     mov ah, 09h
     int 21h
     ret
 GUARDAR_BOSQUEJO ENDP
 
-; Función para convertir el color en formato hexadecimal
+; Convertir color a hexadecimal
 CONVERTIR_COLOR_HEX PROC
-    ; Convertir el valor en AL a hexadecimal ASCII y almacenarlo en el buffer
-    mov bl, al
-    shr bl, 4          ; Obtener el primer dígito hexadecimal (parte alta)
+    ; Preparar buffer para el valor hexadecimal
+    lea si, buffer
+    xor bx, bx           ; Limpiar bx para uso temporal
+    mov bl, al           ; Cargar el color en bl
+    shr bl, 4            ; Tomar la parte alta
     call CONVERTIR_A_HEX
 
-    mov bl, al
-    and bl, 0Fh        ; Obtener el segundo dígito hexadecimal (parte baja)
+    mov bl, al           ; Obtener parte baja
+    and bl, 0Fh          ; Limpiar la parte alta
     call CONVERTIR_A_HEX
-
+    mov [buffer_length], 2  ; Longitud del número hexadecimal (dos dígitos)
     ret
 
 CONVERTIR_A_HEX PROC
-    ; Convertir el valor en BL a su representación hexadecimal ASCII
     cmp bl, 9
-    jbe convert_digit
-    add bl, 7          ; Si es mayor que 9, ajustarlo para A-F
-convert_digit:
-    add bl, '0'        ; Convertir a su código ASCII
-    mov [si], bl       ; Guardar en el buffer
+    jbe digito
+    add bl, 7            ; Ajustar para letras A-F
+digito:
+    add bl, '0'          ; Convertir a ASCII
+    mov [si], bl         ; Guardar el dígito en el buffer
     inc si
     ret
 CONVERTIR_A_HEX ENDP
-
-
-
 
 
 

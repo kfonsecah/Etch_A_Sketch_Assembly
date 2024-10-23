@@ -162,18 +162,23 @@ VERIFICAR_CAMPO_TEXTO macro
     cmp [mouse_y], 440     ; Limite inferior del área del campo de texto
     ja fuera_campo_texto
 
-    ; Verificar si el botón izquierdo del mouse fue presionado
+    ; Verificar si el botón izquierdo del mouse fue presionado (solo una vez)
     test [mouse_buttons], 1
-    jz fuera_campo_texto
+    jz fin_verificar ; Si el botón no está presionado, no hacer nada
 
     ; Activar la captura de texto
     mov [capture_enabled], 1
     jmp fin_verificar
 
 fuera_campo_texto:
-    ; No desactivar captura de texto aquí, para que no se pierda la entrada mientras escribes
+    ; Verificar si se hizo clic fuera del campo de texto para desactivar la captura
+    test [mouse_buttons], 1
+    jz fin_verificar
+    mov [capture_enabled], 0  ; Desactivar la captura de texto
+
 fin_verificar:
 endm
+
 
 
 
@@ -346,9 +351,10 @@ no_move:
 no_key_pressed:
     ret
 MOVER_PIXEL ENDP
+
 CAPTURAR_ENTRADA PROC
     cmp [capture_enabled], 1  ; Verificar si la captura está habilitada
-    jne no_key_pressed2       ; Si no está habilitada, salir
+    jne no_capture_active     ; Si no está habilitada, continuar sin capturar
 
     mov ah, 01h               ; Verificar si hay una tecla presionada
     int 16h
@@ -384,9 +390,14 @@ borrar_caracter:
     call IMPRIMIR_BUFFER
     jmp no_key_pressed2
 
+no_capture_active:
+    ; No hay captura activa, continuar con el programa normalmente
+    ret
+
 no_key_pressed2:
     ret
 CAPTURAR_ENTRADA ENDP
+
 
 IMPRIMIR_BUFFER PROC
     ; Mueve el cursor a la posición del campo de texto (fila 26, columna 32)
@@ -405,7 +416,7 @@ IMPRIMIR_CARACTER:
     je fin_impresion
     mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
     mov al, al              ; El carácter que se va a imprimir
-    mov bl, 0Fh             ; Cambiar el color del texto a blanco (o a un color que se vea)
+    mov bl, 0Ch             ; Cambiar el color del texto a blanco (o a un color que se vea)
     int 10h
     loop IMPRIMIR_CARACTER
 

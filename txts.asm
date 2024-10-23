@@ -11,6 +11,10 @@
     mensaje4 db ' Cargar Bosquejo ', 0 
     mensaje5 db ' Campo de texto ', 0 
     mensaje6 db ' Insertar imagen ', 0 
+
+    mensaje_apertura db 'Abriendo archivo...', 0
+    mensaje_exito db 'Archivo guardado!', 0
+    mensaje_error db 'Error al abrir archivo!', 0
     
 
     buffer db 100 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
@@ -36,6 +40,16 @@
     square_10_color db 0Bh 
     square_11_color db 0Ch
     square_12_color db 0Fh 
+
+    nombre_archivo db 'bosquejo.txt', 0 ; Nombre del archivo
+    file_handle dw 0       ; Handle para el archivo
+    buffer_guardado db 5 dup(0)  ; Buffer para almacenar coordenadas (x, y) y color del píxel
+
+
+    coma db ',', 0                ; Coma como separador
+    salto_linea db 13, 10, 0 ; Salto de línea (retorno de carro + línea nueva)
+
+    fondo_color db 0Fh
 
 ; Macro para dibujar un píxel en la pantalla
 PINTA_PIXEL macro x, y, color
@@ -150,6 +164,48 @@ VERIFICAR_LIMPIAR macro
 
 fuera_limpiar:
 endm
+
+VERIFICAR_GUARDAR macro
+    cmp [mouse_x], 15       ; Verificar si el mouse está dentro del área x del botón
+    jb fuera_guardar
+    cmp [mouse_x], 165      ; Limitar en la coordenada x del botón
+    ja fuera_guardar
+    cmp [mouse_y], 410      ; Verificar si el mouse está dentro del área y del botón
+    jb fuera_guardar
+    cmp [mouse_y], 440      ; Limitar en la coordenada y del botón
+    ja fuera_guardar
+
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz fuera_guardar
+
+    ; Si el clic está dentro del área del botón "Guardar", llamar a GUARDAR_BOSQUEJO
+    call GUARDAR_BOSQUEJO
+
+fuera_guardar:
+endm
+
+VERIFICAR_CARGAR macro
+    cmp [mouse_x], 15       ; Verificar si el mouse está dentro del área x del botón
+    jb fuera_cargar
+    cmp [mouse_x], 165      ; Limitar en la coordenada x del botón
+    ja fuera_cargar
+    cmp [mouse_y], 445      ; Verificar si el mouse está dentro del área y del botón
+    jb fuera_cargar
+    cmp [mouse_y], 475      ; Limitar en la coordenada y del botón
+    ja fuera_cargar
+
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz fuera_cargar
+
+    ; Si el clic está dentro del área del botón "Cargar", llamar a CARGAR_BOSQUEJO
+    ;call CARGAR_BOSQUEJO
+
+fuera_cargar:
+endm
+
+
 
 ; Macro para verificar si el clic está en el campo de texto
 VERIFICAR_CAMPO_TEXTO macro
@@ -449,6 +505,132 @@ fin_impresion:
     ret
 IMPRIMIR_BUFFER ENDP
 
+MOSTRAR_MENSAJE PROC
+    ; Mostrar un mensaje en la fila 25, columna 2
+    local mensaje
+    lea si, mensaje
+    mov dh, 25           ; Fila 25
+    mov dl, 2            ; Columna 2
+    mov ah, 02h
+    int 10h              ; Mover el cursor
+
+    mov ah, 09h          ; Función DOS para imprimir el mensaje
+    lea dx, mensaje
+    int 21h
+    ret
+MOSTRAR_MENSAJE ENDP
+
+GUARDAR_BOSQUEJO PROC
+    ; Mostrar mensaje de apertura de archivo
+    lea dx, mensaje_apertura
+    mov ah, 09h
+    int 21h
+
+    ; Abrir/crear archivo "bosquejo.txt" para escritura
+    mov ah, 3Ch         ; Función DOS 3Ch - Crear archivo
+    lea dx, nombre_archivo   ; Nombre del archivo
+    mov cx, 0           ; Atributos (archivo normal)
+    int 21h
+    jc error_guardar    ; Si hubo error, saltar al manejo de errores
+    mov [file_handle], ax   ; Guardar el handle del archivo
+
+    ; Escribir datos fijos en el archivo para verificar que la escritura funciona
+    mov ah, 40h
+    lea dx, mensaje_exito   ; Escribir un mensaje de prueba para verificar la escritura
+    mov cx, 16             ; Longitud del mensaje
+    int 21h
+
+    ; Recorrer el área de dibujo y guardar los colores en hexadecimal
+    mov cx, 90          ; Iniciar en y=90 (inicio del área de dibujo)
+guardar_filas:
+    mov dx, 136         ; Iniciar en x=136 (inicio del área de dibujo)
+guardar_columnas:
+    ; Leer el color del píxel en la coordenada (dx, cx)
+    mov ah, 0Dh         ; Función de BIOS para leer color del píxel
+    int 10h
+
+    ; Verificar si el píxel no es del color de fondo
+    cmp al, [fondo_color]
+    je skip_pixel       ; Saltar píxeles del color de fondo
+
+    ; Convertir el color del píxel a su representación hexadecimal
+    call CONVERTIR_COLOR_HEX
+    ; Escribir el valor hexadecimal del color en el archivo
+    mov ah, 40h
+    lea dx, buffer
+    mov cx, [buffer_length]
+    int 21h
+
+    ; Escribir un espacio como separador de píxeles
+    mov ah, 40h
+    lea dx, coma
+    mov cx, 1
+    int 21h
+
+skip_pixel:
+    ; Incrementar las columnas
+    inc dx
+    cmp dx, 533         ; Hasta x=533 (límite del área de dibujo)
+    jbe guardar_columnas
+
+    ; Escribir un salto de línea después de cada fila de píxeles
+    mov ah, 40h
+    lea dx, salto_linea
+    mov cx, 2
+    int 21h
+
+    ; Incrementar las filas
+    inc cx
+    cmp cx, 389         ; Hasta y=389 (límite del área de dibujo)
+    jbe guardar_filas
+
+    ; Cerrar el archivo
+    mov ah, 3Eh         ; Función DOS 3Eh - Cerrar archivo
+    mov bx, [file_handle]
+    int 21h
+
+    ; Mostrar mensaje de éxito
+    lea dx, mensaje_exito
+    mov ah, 09h
+    int 21h
+    ret
+
+error_guardar:
+    ; Mostrar mensaje de error al abrir o crear el archivo
+    lea dx, mensaje_error
+    mov ah, 09h
+    int 21h
+    ret
+GUARDAR_BOSQUEJO ENDP
+
+; Función para convertir el color en formato hexadecimal
+CONVERTIR_COLOR_HEX PROC
+    ; Convertir el valor en AL a hexadecimal ASCII y almacenarlo en el buffer
+    mov bl, al
+    shr bl, 4          ; Obtener el primer dígito hexadecimal (parte alta)
+    call CONVERTIR_A_HEX
+
+    mov bl, al
+    and bl, 0Fh        ; Obtener el segundo dígito hexadecimal (parte baja)
+    call CONVERTIR_A_HEX
+
+    ret
+
+CONVERTIR_A_HEX PROC
+    ; Convertir el valor en BL a su representación hexadecimal ASCII
+    cmp bl, 9
+    jbe convert_digit
+    add bl, 7          ; Si es mayor que 9, ajustarlo para A-F
+convert_digit:
+    add bl, '0'        ; Convertir a su código ASCII
+    mov [si], bl       ; Guardar en el buffer
+    inc si
+    ret
+CONVERTIR_A_HEX ENDP
+
+
+
+
 
 
 start:
@@ -513,6 +695,8 @@ main_loop:
 
     VERIFICAR_CAMPO_TEXTO
     VERIFICAR_LIMPIAR
+    VERIFICAR_GUARDAR
+    VERIFICAR_CARGAR
 
     
     ; Capturar entrada de texto

@@ -41,7 +41,8 @@
     square_11_color db 0Ch
     square_12_color db 0Fh 
 
-    nombre_archivo db 'bosquejo.txt', 0 ; Nombre del archivo
+    nombre_archivo db 'nSA.txt', 0
+ ; Nombre del archivo
     file_handle dw 0       ; Handle para el archivo
     buffer_guardado db 5 dup(0)  ; Buffer para almacenar coordenadas (x, y) y color del píxel
 
@@ -520,101 +521,138 @@ MOSTRAR_MENSAJE PROC
     ret
 MOSTRAR_MENSAJE ENDP
 
+
 GUARDAR_BOSQUEJO PROC
-    ; Mostrar mensaje de apertura de archivo
-    lea dx, mensaje_apertura
-    mov ah, 09h
+    ; Abrir archivo en modo de escritura
+    mov ah, 3Ch          ; Función DOS: Crear archivo
+    lea dx, nombre_archivo ; Nombre del archivo
+    xor cx, cx           ; Atributos del archivo (ninguno)
     int 21h
+    jc error_guardar     ; Si hay error, saltar a manejo de error
+    mov [file_handle], ax ; Guardar el handle del archivo
 
-    ; Abrir/crear archivo "bosquejo.txt" para escritura
-    mov ah, 3Ch        ; Función DOS 3Ch - Crear archivo
-    lea dx, nombre_archivo   ; Dirección del nombre del archivo
-    mov cx, 0           ; Atributos del archivo (archivo normal)
-    int 21h
-    jc error_guardar    ; Si hubo error, saltar a manejo de errores
-    mov [file_handle], ax   ; Guardar el handle del archivo
-
-    ; Escribir un mensaje de prueba para asegurar la escritura correcta
-    lea dx, mensaje_exito  ; "Archivo guardado!"
-    mov ah, 40h
-    mov cx, 16             ; Longitud del mensaje
-    int 21h
-
-    ; Recorrer el área de dibujo
-    mov cx, 90         ; Coordenada Y inicial
+    ; Recorrer el área del rectángulo (136, 90, 398, 300)
+    mov di, 90           ; Inicializar Y en 90 (coordenada inicial)
 guardar_filas:
-    mov dx, 136        ; Coordenada X inicial
+    mov si, 136          ; Inicializar X en 136 (coordenada inicial)
 guardar_columnas:
-    ; Leer el color del píxel en la coordenada (dx, cx)
-    mov ah, 0Dh         ; Función de BIOS para leer color del píxel
-    int 10h
+    ; Leer el color del píxel en (si, di)
+    mov ah, 0Dh          ; Función BIOS: Leer color de píxel
+    mov bh, 0            ; Página de pantalla 0
+    mov cx, si           ; Posición X
+    mov dx, di           ; Posición Y
+    int 10h              ; Llamada a BIOS para leer el color
+    ; El color del píxel se guarda en AL
 
-    ; Verificar si el píxel no es del color de fondo
-    cmp al, [fondo_color]
-    je skip_pixel       ; Si es del color de fondo, saltar al siguiente
+    ; *** Mostrar el color leído en pantalla para depuración ***
+    call MOSTRAR_COLOR
 
-    ; Convertir el color a hexadecimal y guardarlo en el archivo
-    call CONVERTIR_COLOR_HEX
+    ; Guardar el color en el archivo
+    call CONVERTIR_COLOR_A_HEX
+    call ESCRIBIR_COLOR_EN_ARCHIVO
+
+    ; Incrementar X y continuar
+    inc si
+    cmp si, 136 + 398    ; Limitar hasta el ancho de 398 píxeles
+    jb guardar_columnas
+
+    ; Guardar un salto de línea después de cada fila
+    lea dx, salto_linea
     mov ah, 40h
-    lea dx, buffer
-    mov cx, [buffer_length]
+    mov bx, [file_handle]
+    mov cx, 2
     int 21h
 
-skip_pixel:
-    ; Incrementar columnas
-    inc dx
-    cmp dx, 533        ; Hasta x=533
-    jbe guardar_columnas
-
-    ; Incrementar filas
-    inc cx
-    cmp cx, 389        ; Hasta y=389
-    jbe guardar_filas
+    ; Incrementar Y y continuar
+    inc di
+    cmp di, 90 + 300     ; Limitar hasta la altura de 300 píxeles
+    jb guardar_filas
 
     ; Cerrar el archivo
-    mov ah, 3Eh         ; Función DOS 3Eh - Cerrar archivo
+    mov ah, 3Eh          ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
 
-    ; Mostrar mensaje de éxito
-    lea dx, mensaje_exito
-    mov ah, 09h
-    int 21h
     ret
 
 error_guardar:
-    ; Mostrar mensaje de error si el archivo no se pudo abrir/crear
-    lea dx, mensaje_error
-    mov ah, 09h
-    int 21h
     ret
 GUARDAR_BOSQUEJO ENDP
 
-; Convertir color a hexadecimal
-CONVERTIR_COLOR_HEX PROC
-    ; Preparar buffer para el valor hexadecimal
-    lea si, buffer
-    xor bx, bx           ; Limpiar bx para uso temporal
-    mov bl, al           ; Cargar el color en bl
-    shr bl, 4            ; Tomar la parte alta
-    call CONVERTIR_A_HEX
+MOSTRAR_COLOR PROC
+    ; Mostrar el valor de AL en hexadecimal
+    push ax
+    push cx
+    push dx
 
-    mov bl, al           ; Obtener parte baja
-    and bl, 0Fh          ; Limpiar la parte alta
-    call CONVERTIR_A_HEX
-    mov [buffer_length], 2  ; Longitud del número hexadecimal (dos dígitos)
+    mov ah, 02h
+    mov bh, 0
+    mov dh, 24        ; Fila 24 para la depuración
+    mov dl, 50        ; Columna 50
+    int 10h           ; Mover el cursor
+
+    ; Convertir y mostrar el valor en hexadecimal
+    call IMPRIMIR_AX  ; Esta rutina ya la tienes para mostrar AX en hexadecimal
+
+    pop dx
+    pop cx
+    pop ax
     ret
+MOSTRAR_COLOR ENDP
 
-CONVERTIR_A_HEX PROC
+
+CONVERTIR_COLOR_A_HEX PROC
+    ; Convertir el valor en AL (color del píxel) a dos dígitos hexadecimales y guardarlo en el buffer
+    xor cx, cx              ; Reiniciar el contador
+    mov si, offset buffer   ; Apuntar al inicio del buffer
+
+    ; Convertir el valor en AL (color del píxel) a hexadecimal
+    xor ax, ax
+    mov al, al              ; El color del píxel está en AL
+    call IMPRIMIR_AX        ; Convertir el valor a hexadecimal y guardarlo en el buffer
+
+    ret
+CONVERTIR_COLOR_A_HEX ENDP
+
+IMPRIMIR_AX PROC
+    push ax            ; Guardar valor de AX
+    push bx            ; Guardar BX (usaremos BX)
+    push cx            ; Guardar CX (usaremos CX)
+
+    ; Convertir el valor bajo de AX a hexadecimal
+    mov bx, ax         ; Cargar el valor en BX
+    and bl, 0Fh        ; Enmascarar los 4 bits bajos
+    call IMPRIMIR_HEX_DIGITO
+
+    pop cx             ; Restaurar CX
+    pop bx             ; Restaurar BX
+    pop ax             ; Restaurar AX
+    ret
+IMPRIMIR_AX ENDP
+
+IMPRIMIR_HEX_DIGITO PROC
+    ; Convertir el valor de BL a un dígito hexadecimal ASCII
     cmp bl, 9
-    jbe digito
-    add bl, 7            ; Ajustar para letras A-F
-digito:
-    add bl, '0'          ; Convertir a ASCII
-    mov [si], bl         ; Guardar el dígito en el buffer
-    inc si
+    jbe es_digito
+    add bl, 7          ; Ajustar para A-F
+es_digito:
+    add bl, '0'        ; Convertir a ASCII
+    mov [buffer], bl   ; Guardar el valor en el buffer
     ret
-CONVERTIR_A_HEX ENDP
+IMPRIMIR_HEX_DIGITO ENDP
+
+ESCRIBIR_COLOR_EN_ARCHIVO PROC
+    ; Escribir el contenido del buffer (color) en el archivo
+    lea dx, buffer
+    mov ah, 40h
+    mov bx, [file_handle]
+    mov cx, 2               ; Longitud de 2 bytes (cada valor hexadecimal es de 2 dígitos)
+    int 21h
+    ret
+ESCRIBIR_COLOR_EN_ARCHIVO ENDP
+
+
+
 
 
 
@@ -693,8 +731,7 @@ main_loop:
     jmp main_loop
 salir:
     ; Restaurar el modo de texto 03h
-    mov ax, 0003h
-    int 10h
+
     ; Terminar el programa
     mov ah, 4Ch
     int 21h

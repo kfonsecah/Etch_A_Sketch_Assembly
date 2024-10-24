@@ -544,10 +544,7 @@ guardar_columnas:
     int 10h              ; Llamada a BIOS para leer el color
     ; El color del píxel se guarda en AL
 
-    ; *** Mostrar el color leído en pantalla para depuración ***
-    call MOSTRAR_COLOR
-
-    ; Guardar el color en el archivo
+    ; Convertir el color del píxel a formato hexadecimal y guardarlo
     call CONVERTIR_COLOR_A_HEX
     call ESCRIBIR_COLOR_EN_ARCHIVO
 
@@ -579,68 +576,30 @@ error_guardar:
     ret
 GUARDAR_BOSQUEJO ENDP
 
-MOSTRAR_COLOR PROC
-    ; Mostrar el valor de AL en hexadecimal
-    push ax
-    push cx
-    push dx
-
-    mov ah, 02h
-    mov bh, 0
-    mov dh, 24        ; Fila 24 para la depuración
-    mov dl, 50        ; Columna 50
-    int 10h           ; Mover el cursor
-
-    ; Convertir y mostrar el valor en hexadecimal
-    call IMPRIMIR_AX  ; Esta rutina ya la tienes para mostrar AX en hexadecimal
-
-    pop dx
-    pop cx
-    pop ax
-    ret
-MOSTRAR_COLOR ENDP
-
-
+; Convertir el valor en AL (color del píxel) a dos dígitos hexadecimales y guardarlo en el buffer
 CONVERTIR_COLOR_A_HEX PROC
-    ; Convertir el valor en AL (color del píxel) a dos dígitos hexadecimales y guardarlo en el buffer
-    xor cx, cx              ; Reiniciar el contador
-    mov si, offset buffer   ; Apuntar al inicio del buffer
-
-    ; Convertir el valor en AL (color del píxel) a hexadecimal
-    xor ax, ax
-    mov al, al              ; El color del píxel está en AL
-    call IMPRIMIR_AX        ; Convertir el valor a hexadecimal y guardarlo en el buffer
-
+    ; Convertir el valor en AL (color del píxel) a hexadecimal y guardarlo
+    mov ah, al             ; Duplicar el valor en AH para trabajar con los dos dígitos
+    shr al, 4              ; Obtener el primer dígito (4 bits altos)
+    call IMPRIMIR_HEX_DIGITO ; Convertir y guardar en el buffer
+    mov al, ah             ; Ahora obtener el segundo dígito (4 bits bajos)
+    and al, 0Fh            ; Enmascarar los bits bajos
+    call IMPRIMIR_HEX_DIGITO ; Convertir y guardar en el buffer
     ret
 CONVERTIR_COLOR_A_HEX ENDP
 
-IMPRIMIR_AX PROC
-    push ax            ; Guardar valor de AX
-    push bx            ; Guardar BX (usaremos BX)
-    push cx            ; Guardar CX (usaremos CX)
-
-    ; Convertir el valor bajo de AX a hexadecimal
-    mov bx, ax         ; Cargar el valor en BX
-    and bl, 0Fh        ; Enmascarar los 4 bits bajos
-    call IMPRIMIR_HEX_DIGITO
-
-    pop cx             ; Restaurar CX
-    pop bx             ; Restaurar BX
-    pop ax             ; Restaurar AX
-    ret
-IMPRIMIR_AX ENDP
-
 IMPRIMIR_HEX_DIGITO PROC
-    ; Convertir el valor de BL a un dígito hexadecimal ASCII
-    cmp bl, 9
+    ; Convertir el valor de AL a un dígito hexadecimal ASCII
+    cmp al, 9
     jbe es_digito
-    add bl, 7          ; Ajustar para A-F
+    add al, 7          ; Ajustar para A-F
 es_digito:
-    add bl, '0'        ; Convertir a ASCII
-    mov [buffer], bl   ; Guardar el valor en el buffer
+    add al, '0'        ; Convertir a ASCII
+    mov [buffer], al   ; Guardar el valor en el buffer
     ret
 IMPRIMIR_HEX_DIGITO ENDP
 
+; Escribir el color en el archivo
 ESCRIBIR_COLOR_EN_ARCHIVO PROC
     ; Escribir el contenido del buffer (color) en el archivo
     lea dx, buffer
@@ -650,6 +609,7 @@ ESCRIBIR_COLOR_EN_ARCHIVO PROC
     int 21h
     ret
 ESCRIBIR_COLOR_EN_ARCHIVO ENDP
+
 
 
 

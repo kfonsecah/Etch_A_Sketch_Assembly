@@ -201,10 +201,12 @@ VERIFICAR_CARGAR macro
     jz fuera_cargar
 
     ; Si el clic está dentro del área del botón "Cargar", llamar a CARGAR_BOSQUEJO
-    ;call CARGAR_BOSQUEJO
+    call CARGAR_BOSQUEJO
 
 fuera_cargar:
 endm
+
+
 
 
 
@@ -611,8 +613,81 @@ ESCRIBIR_COLOR_EN_ARCHIVO PROC
 ESCRIBIR_COLOR_EN_ARCHIVO ENDP
 
 
+CARGAR_BOSQUEJO PROC
+    ; Abrir el archivo en modo de lectura
+    mov ah, 3Dh           ; Función DOS: Abrir archivo
+    lea dx, nombre_archivo ; Nombre del archivo
+    mov al, 0             ; Modo de lectura
+    int 21h
+    jc error_cargar        ; Si hay error, saltar a manejo de error
+    mov [file_handle], ax  ; Guardar el handle del archivo
+
+    ; Recorrer el área del rectángulo (136, 90, 398, 300)
+    mov di, 90           ; Inicializar Y en 90 (coordenada inicial de la fila)
+cargar_filas:
+    mov si, 136          ; Inicializar X en 136 (coordenada inicial de la columna)
+cargar_columnas:
+    ; Leer el color del archivo (2 dígitos hexadecimales)
+    mov ah, 3Fh          ; Función DOS: Leer archivo
+    lea dx, buffer       ; Leer en el buffer
+    mov bx, [file_handle]
+    mov cx, 2            ; Leer 2 bytes (un color en formato hexadecimal)
+    int 21h
+    cmp ax, 2            ; Verificar si se leyeron 2 bytes
+    jne fin_lectura      ; Si no se leyeron 2 bytes, salir del loop
+
+    ; Convertir el valor leído de hexadecimal a un byte de color
+    call CONVERTIR_HEX_A_COLOR
+
+    ; Dibujar el píxel en la posición (si, di)
+    PINTA_PIXEL si, di, al ; 'al' contiene el valor del color
+
+    ; Incrementar X y continuar
+    inc si
+    cmp si, 136 + 398    ; Limitar hasta el ancho de 398 píxeles
+    jb cargar_columnas
+
+    ; Incrementar Y y continuar
+    inc di
+    cmp di, 90 + 300     ; Limitar hasta la altura de 300 píxeles
+    jb cargar_filas
+
+fin_lectura:
+    ; Cerrar el archivo
+    mov ah, 3Eh          ; Función DOS: Cerrar archivo
+    mov bx, [file_handle]
+    int 21h
+
+    ret
+
+error_cargar:
+    ret
+CARGAR_BOSQUEJO ENDP
 
 
+CONVERTIR_HEX_A_COLOR PROC
+    ; Convertir el primer dígito hexadecimal (buffer[0]) a un nibble
+    mov al, [buffer]     ; Cargar el primer dígito
+    call HEX_DIGITO_A_BYTE ; Convertir a un valor numérico
+    shl al, 4            ; Desplazar 4 bits a la izquierda para los 4 bits altos
+
+    ; Convertir el segundo dígito hexadecimal (buffer[1]) y combinarlo con el primero
+    mov ah, [buffer+1]   ; Cargar el segundo dígito
+    call HEX_DIGITO_A_BYTE ; Convertir a un valor numérico
+    or al, ah            ; Combinar los 4 bits altos con los bajos
+
+    ret
+CONVERTIR_HEX_A_COLOR ENDP
+
+HEX_DIGITO_A_BYTE PROC
+    ; Convierte un carácter hexadecimal (AL) a su valor numérico
+    cmp al, '9'
+    jbe es_digito2
+    sub al, 7            ; Ajustar para A-F
+es_digito2:
+    sub al, '0'          ; Convertir de ASCII a valor numérico
+    ret
+HEX_DIGITO_A_BYTE ENDP
 
 
 

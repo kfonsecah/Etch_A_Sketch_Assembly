@@ -644,7 +644,7 @@ cargar_columnas:
 
     ; Incrementar X y continuar
     inc si
-    cmp si, 136 + 398    ; Limitar hasta el ancho de 398 píxeles
+    cmp si, 136 + 399    ; Limitar hasta el ancho de 398 píxeles
     jb cargar_columnas
 
     ; Incrementar Y y continuar

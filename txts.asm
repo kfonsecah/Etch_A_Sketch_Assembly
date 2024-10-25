@@ -528,13 +528,25 @@ MOSTRAR_MENSAJE ENDP
 
 
 GUARDAR_BOSQUEJO PROC
-    ; Abrir archivo en modo de escritura
-    mov ah, 3Ch          ; Función DOS: Crear archivo
-    lea dx, nombre_archivo ; Nombre del archivo
-    xor cx, cx           ; Atributos del archivo (ninguno)
+    ; Asegurarse de que el nombre en el buffer esté correctamente terminado con nulo (0)
+    mov si, [buffer_length]  ; Longitud actual del texto
+    mov byte ptr [buffer + si], '.'  ; Añadir punto
+    inc si
+    mov byte ptr [buffer + si], 't'  ; Añadir 't'
+    inc si
+    mov byte ptr [buffer + si], 'x'  ; Añadir 'x'
+    inc si
+    mov byte ptr [buffer + si], 't'  ; Añadir 't'
+    inc si
+    mov byte ptr [buffer + si], 0    ; Terminar con nulo
+
+    ; Abrir archivo en modo de escritura usando el nombre en el buffer
+    lea dx, buffer         ; Usar el buffer que contiene el nombre del archivo
+    mov ah, 3Ch            ; Función DOS: Crear archivo
+    xor cx, cx             ; Atributos del archivo (ninguno)
     int 21h
-    jc error_guardar     ; Si hay error, saltar a manejo de error
-    mov [file_handle], ax ; Guardar el handle del archivo
+    jc error_guardar       ; Si hay error, saltar a manejo de error
+    mov [file_handle], ax  ; Guardar el handle del archivo
 
     ; Recorrer el área del rectángulo (136, 90, 398, 300)
     mov di, 90           ; Inicializar Y en 90 (coordenada inicial)
@@ -594,6 +606,8 @@ guardar_columnas:
 error_guardar:
     ret
 GUARDAR_BOSQUEJO ENDP
+
+
 
 ; Convertir el valor en AL (color del píxel) a dos dígitos hexadecimales y guardarlo en el buffer
 CONVERTIR_COLOR_A_HEX PROC

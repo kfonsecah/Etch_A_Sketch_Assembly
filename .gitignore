@@ -1,8 +1,7 @@
 # Ignorar archivos .bat
 *.bat
 
-# Ignorar archivos .exe
-*.exe
+
 
 # Ignorar archivos .obj
 *.obj

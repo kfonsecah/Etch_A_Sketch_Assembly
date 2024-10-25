@@ -52,6 +52,9 @@
 
     fondo_color db 0Fh
 
+    arroba db '@', 0
+    porcentaje db '%', 0
+
 ; Macro para dibujar un píxel en la pantalla
 PINTA_PIXEL macro x, y, color
     mov ah, 0Ch
@@ -555,6 +558,13 @@ guardar_columnas:
     cmp si, 136 + 398    ; Limitar hasta el ancho de 398 píxeles
     jb guardar_columnas
 
+    ; Al final de la fila, añadir un '@'
+    mov dx, offset arroba ; Cargar '@' en DX
+    mov ah, 40h
+    mov bx, [file_handle]
+    mov cx, 1
+    int 21h
+
     ; Guardar un salto de línea después de cada fila
     lea dx, salto_linea
     mov ah, 40h
@@ -566,6 +576,13 @@ guardar_columnas:
     inc di
     cmp di, 90 + 300     ; Limitar hasta la altura de 300 píxeles
     jb guardar_filas
+
+    ; Al final de todas las columnas, añadir un '%'
+    mov dx, offset porcentaje ; Cargar '%' en DX
+    mov ah, 40h
+    mov bx, [file_handle]
+    mov cx, 1
+    int 21h
 
     ; Cerrar el archivo
     mov ah, 3Eh          ; Función DOS: Cerrar archivo
@@ -607,7 +624,7 @@ ESCRIBIR_COLOR_EN_ARCHIVO PROC
     lea dx, buffer
     mov ah, 40h
     mov bx, [file_handle]
-    mov cx, 2               ; Longitud de 2 bytes (cada valor hexadecimal es de 2 dígitos)
+    mov cx, 1               ; Longitud de 2 bytes (cada valor hexadecimal es de 2 dígitos)
     int 21h
     ret
 ESCRIBIR_COLOR_EN_ARCHIVO ENDP
@@ -644,7 +661,7 @@ cargar_columnas:
 
     ; Incrementar X y continuar
     inc si
-    cmp si, 136 + 399    ; Limitar hasta el ancho de 398 píxeles
+    cmp si, 136 + 400    ; Limitar hasta el ancho de 398 píxeles
     jb cargar_columnas
 
     ; Incrementar Y y continuar

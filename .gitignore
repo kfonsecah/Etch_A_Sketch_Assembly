@@ -8,4 +8,5 @@
 TXTS.MAP
 *.OBJ
 *.MAP
-*.EXE
+
+TXTS.EXE

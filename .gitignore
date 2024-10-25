@@ -6,3 +6,7 @@
 
 # Ignorar archivos .obj
 *.obj
+TXTS.MAP
+*.OBJ
+*.MAP
+*.EXE

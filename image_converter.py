@@ -27,10 +27,16 @@ def closest_color(rgb):
     return min([(abs(r - cr) ** 2 + abs(g - cg) ** 2 + abs(b - cb) ** 2, hex_value) for hex_value, (cr, cg, cb) in available_colors.items()])[1]
 
 def convert_image_to_hex(image_path, output_path):
-    img = Image.open(image_path).resize((398, 300)).convert('RGB')
+    img = Image.open(image_path).convert('RGB')
+    width, height = img.size
+
+    # Resize only if the image is larger than the target size
+    if width > 398 or height > 300:
+        img = img.resize((398, 300))
+
     with open(output_path, 'w') as f:
-        for y in range(300):
-            for x in range(398):
+        for y in range(img.height):
+            for x in range(img.width):
                 f.write(f'{closest_color(img.getpixel((x, y)))} ')
             f.write('@\n')
 
@@ -39,8 +45,8 @@ def main():
     root.withdraw()
     image_path = filedialog.askopenfilename(title="Select an Image", filetypes=[("Image files", "*.png;*.jpg;*.bmp")])
     if image_path:
-        convert_image_to_hex(image_path, 'HEX.TXT')
-        print('Image converted and saved to HEX.TXT')
+        convert_image_to_hex(image_path, 'image.txt')
+        print('Image converted and saved to image.txt')
 
 if __name__ == '__main__':
     main()

@@ -159,23 +159,25 @@ VERIFICAR_LIMPIAR macro
     jb FUERA_LIMPIAR
     cmp [mouse_y], 72
     ja FUERA_LIMPIAR
+
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz FUERA_LIMPIAR
+
     ; Si el clic está dentro del área del botón "Limpiar" y el botón izquierdo está presionado, dibujar el rectángulo azul
     DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ; Dibujar cuadrado azul (01h es azul)
-    ; Restablecer el nombre del bosquejo en el área de texto
-    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh 
-    ; Reestablecer el cuadro de input de texto
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
+
     ; Limpiar el buffer que contiene el nombre del archivo
-    ;lea di, buffer
-    ;mov cx, 100            ; Tamaño del buffer
-    ;xor al, al             ; Valor 0    
+    lea di, buffer
+    mov cx, 100            ; Tamaño del buffer
+    xor al, al             ; Valor 0    
     ; rep depende de cx, y stosb hace lo usual con al, entonces se rellena el bloque con 0's
     ; Es esto o nada para reestablecer memoria sin que explote
-    ;rep stosb              ; Llenar el buffer con 0
-    ;mov word ptr [buffer_length], 0 ; Resetear la longitud del buffer
+    rep stosb              ; Llenar el buffer con 0
+    mov word ptr [buffer_length], 0 ; Resetear la longitud del buffer
+
+    ; Restablecer el nombre del bosquejo en el área de texto
+    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh 
 
 FUERA_LIMPIAR:
     endm
@@ -452,16 +454,13 @@ CAPTURAR_ENTRADA PROC
     je NO_KEY_PRESSED2        ; Ignorar Esc para evitar salir
 
     ; Verificar si el buffer está lleno
-    cmp [buffer_length], 10   ; Verificar si el buffer está lleno (máximo 10 caracteres)
+    cmp [buffer_length], 10   ; Verificar si el buffer está lleno (máximo 15 caracteres)
     jge NO_KEY_PRESSED2       ; Si está lleno, no hacer nada y seguir en el loop
 
     ; Guardar el carácter en el buffer
     mov si, [buffer_length]
     mov [buffer + si], al
     inc word ptr [buffer_length]
-
-    ; Añadir el terminador nulo al final del buffer
-    mov byte ptr [buffer + si + 1], 0
 
     ; Imprimir el texto actualizado
     call IMPRIMIR_BUFFER
@@ -478,12 +477,7 @@ BORRAR_CARACTER:
     ; Reemplazar el último carácter con un espacio en blanco
     mov byte ptr [buffer + si], ' '
 
-    ; Añadir el terminador nulo al final del buffer
-    mov byte ptr [buffer + si], 0
-
     ; Imprimir el texto actualizado
-    ; Reestablecer el cuadro de input de texto
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
     call IMPRIMIR_BUFFER
     jmp NO_KEY_PRESSED2
 
@@ -528,7 +522,7 @@ IMPRIMIR_CARACTER:
     je fin_impresion
     mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
     mov al, al              ; El carácter que se va a imprimir
-    mov bl, 0Ch             ; Cambiar el color del texto a blanco
+    mov bl, 0Ch             ; Cambiar el color del texto a blanco (o el color que prefieras)
     int 10h
     loop IMPRIMIR_CARACTER
 
@@ -553,57 +547,8 @@ MOSTRAR_MENSAJE ENDP
 
     ; Guarda el bosquejo (HEX.TXT) (TEMPRAL OVERWRITE)
 GUARDAR_BOSQUEJO PROC
-    ; Verificar si el buffer ya contiene la extensión .txt
-    lea si, buffer
-    mov cx, [buffer_length]
-    add si, cx
-    sub si, 4
-    cmp cx, 4
-    jb ADD_EXTENSION_SAVE
-
-    ; Comparar los últimos 4 caracteres con ".txt"
-    mov al, [si]
-    cmp al, '.'
-    jne ADD_EXTENSION_SAVE
-    inc si
-    mov al, [si]
-    cmp al, 't'
-    jne ADD_EXTENSION_SAVE
-    inc si
-    mov al, [si]
-    cmp al, 'x'
-    jne ADD_EXTENSION_SAVE
-    inc si
-    mov al, [si]
-    cmp al, 't'
-    jne ADD_EXTENSION_SAVE
-
-    jmp CREATE_FILE
-
-ADD_EXTENSION_SAVE:
-    ; Añadir la extensión .txt al buffer
-    lea si, buffer
-    mov cx, [buffer_length]
-    add si, cx
-    mov byte ptr [si], '.'
-    inc si
-    mov byte ptr [si], 't'
-    inc si
-    mov byte ptr [si], 'x'
-    inc si
-    mov byte ptr [si], 't'
-    inc si
-    mov byte ptr [si], 0
-    add word ptr [buffer_length], 4
-
-CREATE_FILE:
-
-    ; Repitar el cuadro con nombre para que se vea ahí
-    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
-    IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del bufer (conteniendo el .txt)
-
-    ; Definir el nombre del archivo usando el contenido del buffer
-    lea dx, buffer         ; Usar el nombre del archivo almacenado en el buffer
+    ; Definir el nombre del archivo directamente (TEMPORAL)
+    mov dx, offset nombre_archivo ; Usar el nombre del archivo 'HEX.TXT'
     mov ah, 3Ch            ; Función DOS: Crear archivo
     xor cx, cx             ; Atributos del archivo (ninguno)
     int 21h
@@ -663,7 +608,6 @@ GUARDAR_COLUMNAS:
     mov bx, [file_handle]
     int 21h
     ret
-
 ERROR_GUARDAR:
     ret
 GUARDAR_BOSQUEJO ENDP
@@ -735,7 +679,7 @@ CARGAR_COLUMNAS1:
     cmp al, 10           ; Verificar si es '\n'
     je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
     cmp al, 13           ; Verificar si es '\r'
-    je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
+    je CARGAR_COLUMNAS   ; Ignorar y leer el siguiente byte
 
     ; Verificar si el byte leído es un espacio (omitirlo)
     cmp al, ' '
@@ -775,74 +719,27 @@ INSERTAR_IMAGEN ENDP
 CARGAR_BOSQUEJO PROC
     ; Limpiar el bosquejo anterior
     DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ; Dibujar cuadrado azul (01h es azul)
-    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
-    IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del buffer (conteniendo el .txt)
-
-    ; Verificar si el buffer ya contiene la extensión .txt
-    lea si, buffer
-    mov cx, [buffer_length]
-    add si, cx
-    sub si, 4
-    cmp cx, 4
-    jb ADD_EXTENSION_LOAD
-
-    ; Comparar los últimos 4 caracteres con ".txt"
-    mov al, [si]
-    cmp al, '.'
-    jne ADD_EXTENSION_LOAD
-    inc si
-    mov al, [si]
-    cmp al, 't'
-    jne ADD_EXTENSION_LOAD
-    inc si
-    mov al, [si]
-    cmp al, 'x'
-    jne ADD_EXTENSION_LOAD
-    inc si
-    mov al, [si]
-    cmp al, 't'
-    jne ADD_EXTENSION_LOAD
-
-    jmp OPEN_FILE
-
-ADD_EXTENSION_LOAD:
-    ; Añadir la extensión .txt al buffer
-    lea si, buffer
-    mov cx, [buffer_length]
-    add si, cx
-    mov byte ptr [si], '.'
-    inc si
-    mov byte ptr [si], 't'
-    inc si
-    mov byte ptr [si], 'x'
-    inc si
-    mov byte ptr [si], 't'
-    inc si
-    mov byte ptr [si], 0
-    add word ptr [buffer_length], 4
-
-OPEN_FILE:
     ; Abrir el archivo en modo de lectura
     mov ah, 3Dh           ; Función DOS: Abrir archivo
-    lea dx, buffer        ; Nombre del archivo
+    lea dx, nombre_archivo ; Nombre del archivo
     mov al, 0             ; Modo de lectura
     int 21h
-    jc ERROR_CARGAR       ; Si hay error, saltar a manejo de error
-    mov [file_handle], ax ; Guardar el handle del archivo
+    jc ERROR_CARGAR        ; Si hay error, saltar a manejo de error
+    mov [file_handle], ax  ; Guardar el handle del archivo
 
     ; Recorrer el área del rectángulo (136, 90, 398, 300) x = 262 / y = 210
-    mov di, 90            ; Inicializar Y en 90 (coordenada inicial de la fila)
+    mov di, 90           ; Inicializar Y en 90 (coordenada inicial de la fila)
 CARGAR_FILAS:
-    mov si, 136           ; Inicializar X en 136 (coordenada inicial de la columna)
+    mov si, 136          ; Inicializar X en 136 (coordenada inicial de la columna)
 CARGAR_COLUMNAS:
     ; Leer el color del archivo (1 dígito hexadecimal o '@')
-    mov ah, 3Fh           ; Función DOS: Leer archivo
-    lea dx, buffer        ; Leer en el buffer
+    mov ah, 3Fh          ; Función DOS: Leer archivo
+    lea dx, buffer       ; Leer en el buffer
     mov bx, [file_handle]
-    mov cx, 1             ; Leer 1 byte (un carácter)
+    mov cx, 1            ; Leer 1 byte (un carácter)
     int 21h
-    cmp ax, 1             ; Verificar si se leyó 1 byte
-    jne FIN_LECTURA       ; Si no se leyó 1 byte, salir del loop
+    cmp ax, 1            ; Verificar si se leyó 1 byte
+    jne FIN_LECTURA      ; Si no se leyó 1 byte, salir del loop
 
     ; Verificar si el byte leído es '@' (fin de línea)
     mov al, [buffer]
@@ -850,14 +747,14 @@ CARGAR_COLUMNAS:
     je CAMBIAR_FILA
 
     ; Verificar si el byte leído es un salto de línea (LF o CR)
-    cmp al, 10            ; Verificar si es '\n'
-    je CARGAR_COLUMNAS    ; Ignorar y leer el siguiente byte
-    cmp al, 13            ; Verificar si es '\r'
-    je CARGAR_COLUMNAS    ; Ignorar y leer el siguiente byte
+    cmp al, 10           ; Verificar si es '\n'
+    je CARGAR_COLUMNAS   ; Ignorar y leer el siguiente byte
+    cmp al, 13           ; Verificar si es '\r'
+    je CARGAR_COLUMNAS   ; Ignorar y leer el siguiente byte
 
     ; Verificar si el byte leído es un espacio (omitirlo)
     cmp al, ' '
-    je CARGAR_COLUMNAS    ; Saltar si es un espacio
+    je CARGAR_COLUMNAS   ; Saltar si es un espacio
 
     ; Convertir el valor leído de hexadecimal a un byte de color
     call CONVERTIR_HEX_A_COLOR
@@ -867,7 +764,7 @@ CARGAR_COLUMNAS:
 
     ; Incrementar X y continuar
     inc si
-    cmp si, 534           ; Limitar hasta el ancho de 398 píxeles
+    cmp si, 534    ; Limitar hasta el ancho de 398 píxeles
     jb CARGAR_COLUMNAS
 
     jmp CARGAR_FILAS
@@ -875,12 +772,11 @@ CARGAR_COLUMNAS:
 CAMBIAR_FILA:
     ; Cambiar a la siguiente fila
     inc di
-    cmp di, 390           ; Limitar hasta la altura de 300 píxeles
+    cmp di, 390     ; Limitar hasta la altura de 300 píxeles
     jbe CARGAR_FILAS
-
 FIN_LECTURA:
     ; Cerrar el archivo
-    mov ah, 3Eh           ; Función DOS: Cerrar archivo
+    mov ah, 3Eh          ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
     ret

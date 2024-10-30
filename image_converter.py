@@ -15,9 +15,9 @@ available_colors = {
     '8': (105, 105, 105),    # Dark gray
     '9': (173, 216, 230),    # Light blue
     'A': (144, 238, 144),    # Light green
-    'B': (0, 255, 255),      # Cyan
+    'D': (0, 255, 255),      # Cyan
     'C': (255, 182, 193),    # Light red
-    'D': (255, 165, 0),      # Orange
+    'B': (255, 165, 0),      # Orange
     'E': (128, 0, 128),      # Purple
     'F': (255, 255, 255)     # White
 }

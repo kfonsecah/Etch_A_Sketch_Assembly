@@ -13,6 +13,8 @@
     mensaje_error db 'Error al abrir archivo!', 0
     
     buffer db 100 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
+    color_buffer db 2 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
+
     buffer_length dw 0      ; Longitud actual del texto en el buffer
     capture_enabled db 0    ; 0 = No capturar, 1 = Capturar entrada
 
@@ -21,6 +23,7 @@
     current_x dw 65535    ; Coordenada X inicial (valor fuera de la pantalla)
     current_y dw 65535    ; Coordenada Y inicial (centro de la pantalla)
     color_pixel db 00h 
+    old_color_pixel db 0Fh
 
     mouse_x dw 0          ; Coordenada X del mouse
     mouse_y dw 0          ; Coordenada Y del mouse
@@ -41,7 +44,6 @@
     square_12_color db 0Fh 
     ; Nombre del archivo de imagen
     image_file_name db 'image.txt', 0
-    nombre_archivo db '.txt', 0
 
     ; Gate para el file handling
     file_handle dw 0       ; Handle para el archivo
@@ -160,21 +162,11 @@ VERIFICAR_LIMPIAR macro
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz FUERA_LIMPIAR
-    ; Si el clic está dentro del área del botón "Limpiar" y el botón izquierdo está presionado, dibujar el rectángulo azul
-    DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ; Dibujar cuadrado azul (01h es azul)
-    ; Restablecer el nombre del bosquejo en el área de texto
-    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh 
-    ; Reestablecer el cuadro de input de texto
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
-    ; Limpiar el buffer que contiene el nombre del archivo
-    ;lea di, buffer
-    ;mov cx, 100            ; Tamaño del buffer
-    ;xor al, al             ; Valor 0    
-    ; rep depende de cx, y stosb hace lo usual con al, entonces se rellena el bloque con 0's
-    ; Es esto o nada para reestablecer memoria sin que explote
-    ;rep stosb              ; Llenar el buffer con 0
-    ;mov word ptr [buffer_length], 0 ; Resetear la longitud del buffer
-
+    ; Si el clic está dentro del área del botón "Limpiar" y el botón izquierdo está presionado, limpiar mierda
+    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; Campo de texto
+    IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del bufer (conteniendo el .txt)
+    call IMPRIMIR_BUFFER
 FUERA_LIMPIAR:
     endm
 
@@ -373,6 +365,51 @@ FUERA_ABAJO:
 FIN_ABAJO:
     endm
 
+; Macro para verificar si el clic está en el botón de "Pintar Fondo" y pintar el fondo
+VERIFICAR_PINTAR_FONDO macro
+    ; Only move if mouse is within bounds and left button is pressed
+    cmp [mouse_x], 400
+    jb FUERA_PINTAR_FONDO
+    cmp [mouse_x], 430
+    ja FUERA_PINTAR_FONDO
+    cmp [mouse_y], 445
+    jb FUERA_PINTAR_FONDO
+    cmp [mouse_y], 475
+    ja FUERA_PINTAR_FONDO
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz FUERA_PINTAR_FONDO
+    ; Pintar el fondo con el color actual solo sobre el color anterior
+    mov al, [old_color_pixel]
+    mov ah, al
+    mov di, 90           ; Inicializar Y en 90 (coordenada inicial)
+PINTAR_FILAS_FONDO:
+    mov si, 136          ; Inicializar X en 136 (coordenada inicial)
+PINTAR_COLUMNAS_FONDO:
+    ; Leer el color del píxel en (si, di)
+    mov ah, 0Dh          ; Función BIOS: Leer color de píxel
+    mov bh, 0            ; Página de pantalla 0
+    mov cx, si           ; Posición X
+    mov dx, di           ; Posición Y
+    int 10h              ; Llamada a BIOS para leer el color
+    ; Verificar si el color del píxel es igual al color de fondo anterior
+    cmp al, [old_color_pixel]
+    jne NO_PINTAR_PIXEL
+    ; Pintar el píxel con el color actual
+    mov al, [color_pixel]
+    PINTA_PIXEL si, di, al
+NO_PINTAR_PIXEL:
+    inc si
+    cmp si, 534          ; Limitar hasta el ancho de 398 píxeles
+    jb PINTAR_COLUMNAS_FONDO
+    inc di
+    cmp di, 390          ; Limitar hasta la altura de 300 píxeles
+    jbe PINTAR_FILAS_FONDO
+    ; Actualizar el color de fondo anterior
+    mov al, [color_pixel]
+    mov [old_color_pixel], al
+FUERA_PINTAR_FONDO:
+    endm
 
 
 .CODE ; ################################################################<<<<CODE SECTION>>>>############################################################
@@ -415,7 +452,6 @@ GET_MOUSE_STATUS PROC
     mov [mouse_buttons], bl
     mov [mouse_x], cx
     mov [mouse_y], dx
-
     ret
 GET_MOUSE_STATUS ENDP
 
@@ -453,7 +489,6 @@ DIBUJAR_MOUSE_PIXEL PROC
     VERIFICAR_CUADRADO 75, 105, 200, 230, [square_10_color]
     VERIFICAR_CUADRADO 75, 105, 150, 180, [square_11_color]
     VERIFICAR_CUADRADO 75, 105, 100, 130, [square_12_color]
-
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz NO_CLICK_MOUSE
@@ -468,7 +503,6 @@ DIBUJAR_MOUSE_PIXEL PROC
     mov [current_y], ax
     ; Dibujar el píxel en la nueva posición
     PINTA_PIXEL [current_x], [current_y], [color_pixel]
-
 NO_CLICK_MOUSE:
     ret
 DIBUJAR_MOUSE_PIXEL ENDP
@@ -530,6 +564,10 @@ CAPTURAR_ENTRADA PROC
     cmp [capture_enabled], 1  ; Verificar si la captura está habilitada
     jne NO_CAPTURE_ACTIVE     ; Si no está habilitada, continuar sin capturar
 
+    ;DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
+    
+    ;call IMPRIMIR_BUFFER
+
     mov ah, 01h               ; Verificar si hay una tecla presionada
     int 16h
     jz NO_KEY_PRESSED2        ; Si no hay tecla presionada, salir
@@ -572,16 +610,16 @@ BORRAR_CARACTER:
     DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
     call IMPRIMIR_BUFFER
     jmp NO_KEY_PRESSED2
-
 NO_CAPTURE_ACTIVE:
-    ; No hay captura activa, continuar con el programa normalmente
-    ret
 NO_KEY_PRESSED2:
     ret
 CAPTURAR_ENTRADA ENDP
 
 ; Saca un buffered-output al cursor
 IMPRIMIR_BUFFER PROC
+    ;DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; Campo de texto
+    ;IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del bufer (conteniendo el .txt)
     ; Mueve el cursor a la posición del campo de texto (fila 26, columna 32)
     mov ah, 02h
     mov bh, 0
@@ -601,7 +639,6 @@ BORRAR_TEXTO:
     mov dh, 26
     mov dl, 32
     int 10h
-
     ; Imprimir el contenido actual del buffer
     mov si, offset buffer
     mov cx, [buffer_length]  ; Imprimir solo el texto capturado
@@ -633,6 +670,10 @@ MOSTRAR_MENSAJE PROC
     ret
 MOSTRAR_MENSAJE ENDP
 
+
+
+
+
     ; Guarda el bosquejo (HEX.TXT) (TEMPRAL OVERWRITE)
 GUARDAR_BOSQUEJO PROC
     ; Verificar si el buffer ya contiene la extensión .txt
@@ -658,9 +699,7 @@ GUARDAR_BOSQUEJO PROC
     mov al, [si]
     cmp al, 't'
     jne ADD_EXTENSION_SAVE
-
     jmp CREATE_FILE
-
 ADD_EXTENSION_SAVE:
     ; Añadir la extensión .txt al buffer
     lea si, buffer
@@ -676,11 +715,14 @@ ADD_EXTENSION_SAVE:
     inc si
     mov byte ptr [si], 0
     add word ptr [buffer_length], 4
-
 CREATE_FILE:
-    ; Repitar el cuadro con nombre para que se vea ahí
+    ; Repintar el cuadro con nombre para que se vea ahí
     DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; Campo de texto
     IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del bufer (conteniendo el .txt)
+    call IMPRIMIR_BUFFER
+    ; HERE
+
     ; Definir el nombre del archivo usando el contenido del buffer
     lea dx, buffer         ; Usar el nombre del archivo almacenado en el buffer
     mov ah, 3Ch            ; Función DOS: Crear archivo
@@ -732,10 +774,20 @@ GUARDAR_COLUMNAS:
     mov ah, 3Eh          ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
-    ret
 ERROR_GUARDAR:
     ret
 GUARDAR_BOSQUEJO ENDP
+
+
+
+
+
+
+
+
+
+
+
 
 ; Convertir el valor en AL (color del píxel) a dos dígitos hexadecimales y guardarlo en el buffer
 CONVERTIR_COLOR_A_HEX PROC
@@ -756,14 +808,14 @@ IMPRIMIR_HEX_DIGITO PROC
     add al, 7          ; Ajustar para A-F
 ES_DIGITO:
     add al, '0'        ; Convertir a ASCII
-    mov [buffer], al   ; Guardar el valor en el buffer
+    mov [color_buffer], al   ; Guardar el valor en el buffer
     ret
 IMPRIMIR_HEX_DIGITO ENDP
 
 ; Escribir el color en el archivo
 ESCRIBIR_COLOR_EN_ARCHIVO PROC
     ; Escribir el contenido del buffer (color) en el archivo
-    lea dx, buffer
+    lea dx, color_buffer
     mov ah, 40h
     mov bx, [file_handle]
     mov cx, 1               ; Longitud de 2 bytes (cada valor hexadecimal es de 2 dígitos)
@@ -1009,7 +1061,6 @@ DRAW_ARROWS PROC
     PINTA_PIXEL 583, 461, 00h
     PINTA_PIXEL 574, 460, 00h
     PINTA_PIXEL 584, 460, 00h
-
     ret
 DRAW_ARROWS ENDP
 
@@ -1045,28 +1096,60 @@ start: ; ################################################################<<<<STA
     DIBUJAR_CUADRADO 75, 100, 30, 0Fh ; Sexto cuadrado
 
     ; [<-] [->] [^] [v]
-    DIBUJAR_CUADRADO 564, 445, 30, 0Fh ; tecla ABAJO
-    DIBUJAR_CUADRADO 529, 445, 30, 0Fh ; teclado ARRIBA
-    DIBUJAR_CUADRADO 494, 445, 30, 0Fh ; tecla DERECHA
-    DIBUJAR_CUADRADO 459, 445, 30, 0Fh ; tecla IZQUIERDA
+    DIBUJAR_CUADRADO 564, 445, 30, 0Fh ; ABAJO
+    DIBUJAR_CUADRADO 529, 445, 30, 0Fh ; ARRIBA
+    DIBUJAR_CUADRADO 494, 445, 30, 0Fh ; DERECHA
+    DIBUJAR_CUADRADO 459, 445, 30, 0Fh ; IZQUIERDA
+    DIBUJAR_CUADRADO 459, 445, 30, 0Fh ; IZQUIERDA
+    DIBUJAR_CUADRADO 390, 445, 30, 0Fh ; PINTAR FONDO
+    call DRAW_ARROWS ; para compactar la lógica de flechas pura mierda
 
-    ; Draw arrow symbols inside the squares
-    
+    ; playo no sé ni que hice es una cruz pero quería un triangulo
+    PINTA_PIXEL 400, 455, 00h
+    PINTA_PIXEL 401, 455, 00h
+    PINTA_PIXEL 400, 456, 00h
+    PINTA_PIXEL 401, 456, 00h
+
+    PINTA_PIXEL 399, 457, 00h
+    PINTA_PIXEL 400, 457, 00h
+    PINTA_PIXEL 401, 457, 00h
+    PINTA_PIXEL 402, 457, 00h
+
+    PINTA_PIXEL 398, 458, 00h
+    PINTA_PIXEL 399, 458, 00h
+    PINTA_PIXEL 400, 458, 00h
+    PINTA_PIXEL 401, 458, 00h
+    PINTA_PIXEL 402, 458, 00h
+    PINTA_PIXEL 403, 458, 00h
+
+    PINTA_PIXEL 398, 459, 00h
+    PINTA_PIXEL 399, 459, 00h
+    PINTA_PIXEL 400, 459, 00h
+    PINTA_PIXEL 401, 459, 00h
+    PINTA_PIXEL 402, 459, 00h
+    PINTA_PIXEL 403, 459, 00h
+
+    PINTA_PIXEL 399, 460, 00h
+    PINTA_PIXEL 400, 460, 00h
+    PINTA_PIXEL 401, 460, 00h
+    PINTA_PIXEL 402, 460, 00h
+
+    PINTA_PIXEL 400, 461, 00h
+    PINTA_PIXEL 401, 461, 00h
+    PINTA_PIXEL 400, 462, 00h
+    PINTA_PIXEL 401, 462, 00h
 
     DIBUJAR_RECTANGULO 15, 410, 150, 30, 00h ;Guardar Bosquejo btn
     DIBUJAR_RECTANGULO 15, 445, 150, 30, 00h
     DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
     DIBUJAR_RECTANGULO 465, 410, 145, 30, 00h; Insertar imagen
-
+    
     IMPRIMIR_TEXTO  3, 55, mensaje1, 1Fh  ;Limpiar
     IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh   ;Dibujo sin nombre
     IMPRIMIR_TEXTO  26, 2, mensaje3, 1Fh  ;Guardar Bosquejo
     IMPRIMIR_TEXTO 28, 2, mensaje4, 2Fh  ;Cargar Bosquejo
     IMPRIMIR_TEXTO 26, 32, mensaje5, 2Fh  ;Campo de texto
     IMPRIMIR_TEXTO 26, 59, mensaje6, 2Fh  ;Campo de texto
-
-    call DRAW_ARROWS
-    
 call INIT_MOUSE
 
 MAIN_LOOP:; ################################################################<<<<MAIN LOOP>>>>################################################################
@@ -1078,11 +1161,11 @@ MAIN_LOOP:; ################################################################<<<<
     VERIFICAR_GUARDAR
     VERIFICAR_CARGAR
     VERIFICAR_INSERTAR
-
     VERIFICAR_ABAJO
     VERIFICAR_DERECHA
     VERIFICAR_IZQUIERDA
     VERIFICAR_ARRIBA
+    VERIFICAR_PINTAR_FONDO
 
     ; Capturar entrada de texto
     call CAPTURAR_ENTRADA

@@ -1,7 +1,6 @@
 .MODEL small
 .STACK 100h
-
-.DATA ;################################################################<<<<DATA SECTION>>>>############################################################
+.DATA;################################################################<<<<DATA SECTION>>>>############################################################
     ; Texto general
     mensaje1 db ' Limpiar ', 0
     mensaje2 db ' Dibujo sin nombre ', 0  
@@ -13,14 +12,18 @@
     mensaje_exito db 'Archivo guardado!', 0
     mensaje_error db 'Error al abrir archivo!', 0
     
-
     buffer db 100 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
+    color_buffer db 2 dup(' ')  ; Espacio para almacenar hasta 32 caracteres de texto
+
     buffer_length dw 0      ; Longitud actual del texto en el buffer
     capture_enabled db 0    ; 0 = No capturar, 1 = Capturar entrada
+
+    movement_enabled dw 0   ; Flag para el manejo de clickeo en las teclas direccionales 8===D
 
     current_x dw 65535    ; Coordenada X inicial (valor fuera de la pantalla)
     current_y dw 65535    ; Coordenada Y inicial (centro de la pantalla)
     color_pixel db 00h 
+    old_color_pixel db 0Fh
 
     mouse_x dw 0          ; Coordenada X del mouse
     mouse_y dw 0          ; Coordenada Y del mouse
@@ -39,14 +42,12 @@
     square_10_color db 0Bh 
     square_11_color db 0Ch
     square_12_color db 0Fh 
-
     ; Nombre del archivo de imagen
     image_file_name db 'image.txt', 0
-    nombre_archivo db '.txt', 0
 
+    ; Gate para el file handling
     file_handle dw 0       ; Handle para el archivo
     buffer_guardado db 5 dup(0)  ; Buffer para almacenar coordenadas (x, y) y color del píxel
-
     ; Carácteres constantes
     coma db ',', 0            ; Coma como separador
     salto_linea db 13, 10, 0  ; Salto de línea (retorno de carro + línea nueva)
@@ -68,7 +69,6 @@ endm
 ; Macro para dibujar un cuadrado
 DIBUJAR_CUADRADO macro x_inicial, y_inicial, tamano, color
     local FILAS_CUADRADO, COLUMNAS_CUADRADO
-    
         mov di, y_inicial
 FILAS_CUADRADO:
         mov si, x_inicial
@@ -96,6 +96,46 @@ COLUMNAS_RECTANGULO:
         inc di
         cmp di, y_inicial + alto
         jb FILAS_RECTANGULO
+    endm
+
+DIBUJAR_BORDE_RECTANGULO macro x_inicial, y_inicial, ancho, alto, color
+    local COLUMNAS_BORDE_SUPERIOR, COLUMNAS_BORDE_INFERIOR, FILAS_BORDE_IZQUIERDO, FILAS_BORDE_DERECHO
+
+    ; Dibujar borde superior
+    mov cx, x_inicial
+    mov dx, y_inicial
+COLUMNAS_BORDE_SUPERIOR:
+    PINTA_PIXEL cx, dx, color
+    inc cx
+    cmp cx, x_inicial + ancho
+    jb COLUMNAS_BORDE_SUPERIOR
+
+    ; Dibujar borde inferior
+    mov cx, x_inicial
+    mov dx, y_inicial + alto - 1
+COLUMNAS_BORDE_INFERIOR:
+    PINTA_PIXEL cx, dx, color
+    inc cx
+    cmp cx, x_inicial + ancho
+    jb COLUMNAS_BORDE_INFERIOR
+
+    ; Dibujar borde izquierdo
+    mov cx, x_inicial
+    mov dx, y_inicial
+FILAS_BORDE_IZQUIERDO:
+    PINTA_PIXEL cx, dx, color
+    inc dx
+    cmp dx, y_inicial + alto
+    jb FILAS_BORDE_IZQUIERDO
+
+    ; Dibujar borde derecho
+    mov cx, x_inicial + ancho - 1
+    mov dx, y_inicial
+FILAS_BORDE_DERECHO:
+    PINTA_PIXEL cx, dx, color
+    inc dx
+    cmp dx, y_inicial + alto
+    jb FILAS_BORDE_DERECHO
     endm
 
 RELLENAR_PANTALLA macro color
@@ -159,26 +199,20 @@ VERIFICAR_LIMPIAR macro
     jb FUERA_LIMPIAR
     cmp [mouse_y], 72
     ja FUERA_LIMPIAR
-
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz FUERA_LIMPIAR
-
-    ; Si el clic está dentro del área del botón "Limpiar" y el botón izquierdo está presionado, dibujar el rectángulo azul
-    DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ; Dibujar cuadrado azul (01h es azul)
-
-    ; Limpiar el buffer que contiene el nombre del archivo
-    lea di, buffer
-    mov cx, 100            ; Tamaño del buffer
-    xor al, al             ; Valor 0    
-    ; rep depende de cx, y stosb hace lo usual con al, entonces se rellena el bloque con 0's
-    ; Es esto o nada para reestablecer memoria sin que explote
-    rep stosb              ; Llenar el buffer con 0
-    mov word ptr [buffer_length], 0 ; Resetear la longitud del buffer
-
-    ; Restablecer el nombre del bosquejo en el área de texto
-    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh 
-
+    ; Si el clic está dentro del área del botón "Limpiar" y el botón izquierdo está presionado, limpiar el área de dibujo
+    DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ; Limpiar el área de dibujo con el color de fondo anterior
+    mov [old_color_pixel], 0Fh
+    ; Verificar si el primer carácter del buffer es un espacio
+    mov al, [buffer]
+    cmp al, ' '
+    je FUERA_LIMPIAR
+    ; Imprimir el buffer si no es un espacio
+    ;DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Cuadrado en nombre de dibujo
+    ;IMPRIMIR_TEXTO 3, 20, [buffer], 2Fh
+    call IMPRIMIR_BUFFER
 FUERA_LIMPIAR:
     endm
 
@@ -191,11 +225,9 @@ VERIFICAR_GUARDAR macro
     jb FUERA_GUARDAR
     cmp [mouse_y], 440      ; Limitar en la coordenada y del botón
     ja FUERA_GUARDAR
-
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz FUERA_GUARDAR
-
     ; Si el clic está dentro del área del botón "Guardar", llamar a GUARDAR_BOSQUEJO
     call GUARDAR_BOSQUEJO
 FUERA_GUARDAR:
@@ -211,11 +243,9 @@ VERIFICAR_CARGAR macro
     jb FUERA_CARGAR
     cmp [mouse_y], 475      ; Limitar en la coordenada y del botón
     ja FUERA_CARGAR
-
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz FUERA_CARGAR
-
     ; Si el clic está dentro del área del botón "Cargar", llamar a CARGAR_BOSQUEJO
     call CARGAR_BOSQUEJO
 FUERA_CARGAR:
@@ -231,11 +261,9 @@ VERIFICAR_INSERTAR macro
     jb FUERA_INSERTAR
     cmp [mouse_y], 440       ; Limitar en la coordenada y del botón
     ja FUERA_INSERTAR
-
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz FUERA_INSERTAR
-
     ; Si el clic está dentro del área del botón "Insertar imagen", llamar a INSERTAR_IMAGEN
     call INSERTAR_IMAGEN
 FUERA_INSERTAR:
@@ -251,11 +279,9 @@ VERIFICAR_CAMPO_TEXTO macro
     jb FUERA_CAMPO_TEXTO
     cmp [mouse_y], 440     ; Limite inferior del área del campo de texto
     ja FUERA_CAMPO_TEXTO
-
     ; Verificar si el botón izquierdo del mouse fue presionado (solo una vez)
     test [mouse_buttons], 1
     jz fin_verificar ; Si el botón no está presionado, no hacer nada
-
     ; Activar la captura de texto
     mov [capture_enabled], 1
     jmp FIN_VERIFICAR
@@ -268,6 +294,169 @@ FUERA_CAMPO_TEXTO:
 
 FIN_VERIFICAR:
     endm
+
+    ; Macro para verificar si el clic está en el botón de "Izquierda" y mover el píxel
+VERIFICAR_IZQUIERDA macro
+    ; Only move if mouse is within bounds and left button is pressed
+    cmp [mouse_x], 459
+    jb FUERA_IZQUIERDA
+    cmp [mouse_x], 489
+    ja FUERA_IZQUIERDA
+    cmp [mouse_y], 445
+    jb FUERA_IZQUIERDA
+    cmp [mouse_y], 475
+    ja FUERA_IZQUIERDA
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz FUERA_IZQUIERDA
+    ; Move pixel only if flag allows it
+    cmp [movement_enabled], 0
+    jne FUERA_IZQUIERDA
+    ; Enable movement flag
+    mov [movement_enabled], 1
+    ; Move pixel to the left
+    call MOVER_IZQUIERDA
+FUERA_IZQUIERDA:
+    ; Reset the movement flag when mouse button is released
+    test [mouse_buttons], 1
+    jnz FIN_IZQUIERDA
+    mov [movement_enabled], 0
+FIN_IZQUIERDA:
+    endm
+
+; Macro para verificar si el clic está en el botón de "Derecha" y mover el píxel
+VERIFICAR_DERECHA macro
+    ; Only move if mouse is within bounds and left button is pressed
+    cmp [mouse_x], 494
+    jb FUERA_DERECHA
+    cmp [mouse_x], 524
+    ja FUERA_DERECHA
+    cmp [mouse_y], 445
+    jb FUERA_DERECHA
+    cmp [mouse_y], 475
+    ja FUERA_DERECHA
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz FUERA_DERECHA
+    ; Move pixel only if flag allows it
+    cmp [movement_enabled], 0
+    jne FUERA_DERECHA
+    ; Enable movement flag
+    mov [movement_enabled], 1
+    ; Move pixel to the right
+    call MOVER_DERECHA
+FUERA_DERECHA:
+    ; Reset the movement flag when mouse button is released
+    test [mouse_buttons], 1
+    jnz FIN_DERECHA
+    mov [movement_enabled], 0
+FIN_DERECHA:
+    endm
+
+; Macro para verificar si el clic está en el botón de "Arriba" y mover el píxel
+VERIFICAR_ARRIBA macro
+    ; Only move if mouse is within bounds and left button is pressed
+    cmp [mouse_x], 529
+    jb FUERA_ARRIBA
+    cmp [mouse_x], 559
+    ja FUERA_ARRIBA
+    cmp [mouse_y], 445
+    jb FUERA_ARRIBA
+    cmp [mouse_y], 475
+    ja FUERA_ARRIBA
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz FUERA_ARRIBA
+    ; Move pixel only if flag allows it
+    cmp [movement_enabled], 0
+    jne FUERA_ARRIBA
+    ; Enable movement flag
+    mov [movement_enabled], 1
+    ; Move pixel up
+    call MOVER_ARRIBA
+FUERA_ARRIBA:
+    ; Reset the movement flag when mouse button is released
+    test [mouse_buttons], 1
+    jnz FIN_ARRIBA
+    mov [movement_enabled], 0
+FIN_ARRIBA:
+    endm
+
+; Macro para verificar si el clic está en el botón de "Abajo" y mover el píxel
+VERIFICAR_ABAJO macro
+    ; Only move if mouse is within bounds and left button is pressed
+    cmp [mouse_x], 564
+    jb FUERA_ABAJO
+    cmp [mouse_x], 594
+    ja FUERA_ABAJO
+    cmp [mouse_y], 445
+    jb FUERA_ABAJO
+    cmp [mouse_y], 475
+    ja FUERA_ABAJO
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz FUERA_ABAJO
+    ; Move pixel only if flag allows it
+    cmp [movement_enabled], 0
+    jne FUERA_ABAJO
+    ; Enable movement flag
+    mov [movement_enabled], 1
+    ; Move pixel down
+    call MOVER_ABAJO
+FUERA_ABAJO:
+    ; Reset the movement flag when mouse button is released
+    test [mouse_buttons], 1
+    jnz FIN_ABAJO
+    mov [movement_enabled], 0
+FIN_ABAJO:
+    endm
+
+; Macro para verificar si el clic está en el botón de "Pintar Fondo" y pintar el fondo
+VERIFICAR_PINTAR_FONDO macro
+    ; Only move if mouse is within bounds and left button is pressed
+    cmp [mouse_x], 400
+    jb FUERA_PINTAR_FONDO
+    cmp [mouse_x], 430
+    ja FUERA_PINTAR_FONDO
+    cmp [mouse_y], 445
+    jb FUERA_PINTAR_FONDO
+    cmp [mouse_y], 475
+    ja FUERA_PINTAR_FONDO
+    ; Verificar si el botón izquierdo del mouse fue presionado
+    test [mouse_buttons], 1
+    jz FUERA_PINTAR_FONDO
+    ; Pintar el fondo con el color actual solo sobre el color anterior
+    mov al, [old_color_pixel]
+    mov ah, al
+    mov di, 90           ; Inicializar Y en 90 (coordenada inicial)
+PINTAR_FILAS_FONDO:
+    mov si, 136          ; Inicializar X en 136 (coordenada inicial)
+PINTAR_COLUMNAS_FONDO:
+    ; Leer el color del píxel en (si, di)
+    mov ah, 0Dh          ; Función BIOS: Leer color de píxel
+    mov bh, 0            ; Página de pantalla 0
+    mov cx, si           ; Posición X
+    mov dx, di           ; Posición Y
+    int 10h              ; Llamada a BIOS para leer el color
+    ; Verificar si el color del píxel es igual al color de fondo anterior
+    cmp al, [old_color_pixel]
+    jne NO_PINTAR_PIXEL
+    ; Pintar el píxel con el color actual
+    mov al, [color_pixel]
+    PINTA_PIXEL si, di, al
+NO_PINTAR_PIXEL:
+    inc si
+    cmp si, 534          ; Limitar hasta el ancho de 398 píxeles
+    jb PINTAR_COLUMNAS_FONDO
+    inc di
+    cmp di, 390          ; Limitar hasta la altura de 300 píxeles
+    jbe PINTAR_FILAS_FONDO
+    ; Actualizar el color de fondo anterior
+    mov al, [color_pixel]
+    mov [old_color_pixel], al
+FUERA_PINTAR_FONDO:
+    endm
+
 
 .CODE ; ################################################################<<<<CODE SECTION>>>>############################################################
 ; Inicializar el mouse y mostrar el cursor
@@ -309,9 +498,6 @@ GET_MOUSE_STATUS PROC
     mov [mouse_buttons], bl
     mov [mouse_x], cx
     mov [mouse_y], dx
-
-    ; Dibujar un píxel en la posición del mouse para representarlo
-      ; Dibuja el cursor como un píxel blanco
     ret
 GET_MOUSE_STATUS ENDP
 
@@ -327,7 +513,6 @@ VERIFICAR_AREA_DIBUJO PROC
     ja NO_CLICK_DIBUJO       ; Si está abajo, no permitir dibujo
     mov ax, 1                ; Si está dentro, permitir dibujo
     ret                      ; Si está dentro, permitir dibujo
-
 NO_CLICK_DIBUJO:
     mov ax, 0                ; Si está fuera, bloquear el dibujo
     ret
@@ -336,9 +521,8 @@ VERIFICAR_AREA_DIBUJO ENDP
 ; Dibujar el píxel en la nueva posición del mouse
 DIBUJAR_MOUSE_PIXEL PROC
     call GET_MOUSE_STATUS
-
     ; Verificar los cuadrados de colores usando la macro VERIFICAR_CUADRADO
-    VERIFICAR_CUADRADO 564, 594, 350, 380, [square_1_color];AZUL
+    VERIFICAR_CUADRADO 564, 594, 350, 380, [square_1_color]
     VERIFICAR_CUADRADO 564, 594, 300, 330, [square_2_color]
     VERIFICAR_CUADRADO 564, 594, 250, 280, [square_3_color]
     VERIFICAR_CUADRADO 564, 594, 200, 230, [square_4_color]
@@ -351,25 +535,20 @@ DIBUJAR_MOUSE_PIXEL PROC
     VERIFICAR_CUADRADO 75, 105, 200, 230, [square_10_color]
     VERIFICAR_CUADRADO 75, 105, 150, 180, [square_11_color]
     VERIFICAR_CUADRADO 75, 105, 100, 130, [square_12_color]
-
     ; Verificar si el botón izquierdo del mouse fue presionado
     test [mouse_buttons], 1
     jz NO_CLICK_MOUSE
-
     ; Verificar si el clic está dentro del área de dibujo
     call VERIFICAR_AREA_DIBUJO
     cmp ax, 1
     jne NO_CLICK_MOUSE  ; Si ax no es 1, no pintar
-
     ; Guardar la posición del clic como la nueva posición del píxel
     mov ax, [mouse_x]
     mov [current_x], ax
     mov ax, [mouse_y]
     mov [current_y], ax
-
     ; Dibujar el píxel en la nueva posición
     PINTA_PIXEL [current_x], [current_y], [color_pixel]
-
 NO_CLICK_MOUSE:
     ret
 DIBUJAR_MOUSE_PIXEL ENDP
@@ -393,42 +572,35 @@ MOVER_PIXEL PROC
     cmp al, 27
     jmp SALIR                ; Salir si se presiona Esc
     ret
-
 MOVER_ARRIBA:
     cmp [current_y], 90
     jle NO_MOVE
     dec word ptr [current_y]
     call DIBUJAR_TRAZO
     ret
-
 MOVER_ABAJO:
     cmp [current_y], 389
     jge NO_MOVE
     inc word ptr [current_y]
     call DIBUJAR_TRAZO
     ret
-
 MOVER_IZQUIERDA:
     cmp [current_x], 136
     jle NO_MOVE
     dec word ptr [current_x]
     call DIBUJAR_TRAZO
     ret
-
 MOVER_DERECHA:
     cmp [current_x], 533
     jge NO_MOVE
     inc word ptr [current_x]
     call DIBUJAR_TRAZO
     ret
-
 DIBUJAR_TRAZO:
     PINTA_PIXEL [current_x], [current_y], [color_pixel]
     ret
-
 NO_MOVE:
     ret
-
 NO_KEY_PRESSED:
     ret
 MOVER_PIXEL ENDP
@@ -452,16 +624,15 @@ CAPTURAR_ENTRADA PROC
 
     cmp al, 27                ; Verificar si se presionó Esc (código ASCII 27)
     je NO_KEY_PRESSED2        ; Ignorar Esc para evitar salir
-
     ; Verificar si el buffer está lleno
-    cmp [buffer_length], 10   ; Verificar si el buffer está lleno (máximo 15 caracteres)
+    cmp [buffer_length], 10   ; Verificar si el buffer está lleno (máximo 10 caracteres)
     jge NO_KEY_PRESSED2       ; Si está lleno, no hacer nada y seguir en el loop
-
     ; Guardar el carácter en el buffer
     mov si, [buffer_length]
     mov [buffer + si], al
     inc word ptr [buffer_length]
-
+    ; Añadir el terminador nulo al final del buffer
+    mov byte ptr [buffer + si + 1], 0
     ; Imprimir el texto actualizado
     call IMPRIMIR_BUFFER
     jmp NO_KEY_PRESSED2
@@ -469,35 +640,37 @@ CAPTURAR_ENTRADA PROC
 BORRAR_CARACTER:
     cmp [buffer_length], 0    ; Verificar si el buffer está vacío
     je NO_KEY_PRESSED2        ; Si está vacío, no hacer nada
-
     ; Reducir la longitud del buffer
     dec word ptr [buffer_length]
     mov si, [buffer_length]
-    
     ; Reemplazar el último carácter con un espacio en blanco
     mov byte ptr [buffer + si], ' '
-
+    ; Añadir el terminador nulo al final del buffer
+    mov byte ptr [buffer + si], 0
     ; Imprimir el texto actualizado
+    ; Reestablecer el cuadro de input de texto
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
     call IMPRIMIR_BUFFER
     jmp NO_KEY_PRESSED2
-
 NO_CAPTURE_ACTIVE:
-    ; No hay captura activa, continuar con el programa normalmente
-    ret
-
 NO_KEY_PRESSED2:
+    mov al, [buffer]
+    cmp al, ' '
+    jne NO_INPUT_YET
+    ;IMPRIMIR_TEXTO 26, 32, mensaje5, 2Fh  ;Campo de texto
+NO_INPUT_YET:
     ret
 CAPTURAR_ENTRADA ENDP
 
 ; Saca un buffered-output al cursor
 IMPRIMIR_BUFFER PROC
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; Campo de texto
     ; Mueve el cursor a la posición del campo de texto (fila 26, columna 32)
     mov ah, 02h
     mov bh, 0
     mov dh, 26              ; Fila 26, donde está el campo de texto
     mov dl, 32              ; Columna 32
     int 10h                 ; Llamada a BIOS para mover el cursor
-
     ; Borrar la línea completa del campo de texto
     mov cx, 15              ; Longitud máxima del campo de texto
     mov al, ' '             ; Carácter de espacio
@@ -505,14 +678,12 @@ BORRAR_TEXTO:
     mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
     int 10h
     loop BORRAR_TEXTO
-
     ; Mueve el cursor a la posición inicial del campo de texto de nuevo
     mov ah, 02h
     mov bh, 0
     mov dh, 26
     mov dl, 32
     int 10h
-
     ; Imprimir el contenido actual del buffer
     mov si, offset buffer
     mov cx, [buffer_length]  ; Imprimir solo el texto capturado
@@ -522,10 +693,9 @@ IMPRIMIR_CARACTER:
     je fin_impresion
     mov ah, 0Eh             ; Función de BIOS para imprimir el carácter
     mov al, al              ; El carácter que se va a imprimir
-    mov bl, 0Ch             ; Cambiar el color del texto a blanco (o el color que prefieras)
+    mov bl, 0Ch             ; Cambiar el color del texto a blanco
     int 10h
     loop IMPRIMIR_CARACTER
-
 fin_impresion:
     ret
 IMPRIMIR_BUFFER ENDP
@@ -547,14 +717,64 @@ MOSTRAR_MENSAJE ENDP
 
     ; Guarda el bosquejo (HEX.TXT) (TEMPRAL OVERWRITE)
 GUARDAR_BOSQUEJO PROC
-    ; Definir el nombre del archivo directamente (TEMPORAL)
-    mov dx, offset nombre_archivo ; Usar el nombre del archivo 'HEX.TXT'
+    mov al, [buffer]
+    cmp al, ' '
+    je SIN_BUFFER_GUARDAR
+    jmp SKIP_SIN_BUFFER_GUARDAR
+    SIN_BUFFER_GUARDAR:
+    ret
+    SKIP_SIN_BUFFER_GUARDAR:
+    ; Verificar si el buffer ya contiene la extensión .txt
+    lea si, buffer
+    mov cx, [buffer_length]
+    add si, cx
+    sub si, 4
+    cmp cx, 4
+    jb ADD_EXTENSION_SAVE
+    ; Comparar los últimos 4 caracteres con ".txt"
+    mov al, [si]
+    cmp al, '.'
+    jne ADD_EXTENSION_SAVE
+    inc si
+    mov al, [si]
+    cmp al, 't'
+    jne ADD_EXTENSION_SAVE
+    inc si
+    mov al, [si]
+    cmp al, 'x'
+    jne ADD_EXTENSION_SAVE
+    inc si
+    mov al, [si]
+    cmp al, 't'
+    jne ADD_EXTENSION_SAVE
+    jmp CREATE_FILE
+ADD_EXTENSION_SAVE:
+    ; Añadir la extensión .txt al buffer
+    lea si, buffer
+    mov cx, [buffer_length]
+    add si, cx
+    mov byte ptr [si], '.'
+    inc si
+    mov byte ptr [si], 't'
+    inc si
+    mov byte ptr [si], 'x'
+    inc si
+    mov byte ptr [si], 't'
+    inc si
+    mov byte ptr [si], 0
+    add word ptr [buffer_length], 4
+CREATE_FILE:
+    ; Repintar el cuadro con nombre para que se vea ahí
+    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
+    IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del bufer (conteniendo el .txt)
+    call IMPRIMIR_BUFFER
+    ; Definir el nombre del archivo usando el contenido del buffer
+    lea dx, buffer         ; Usar el nombre del archivo almacenado en el buffer
     mov ah, 3Ch            ; Función DOS: Crear archivo
     xor cx, cx             ; Atributos del archivo (ninguno)
     int 21h
     jc ERROR_GUARDAR       ; Si hay error, saltar a manejo de error
     mov [file_handle], ax  ; Guardar el handle del archivo
-
     ; Recorrer el área del rectángulo (136, 90, 398, 300)
     mov di, 90           ; Inicializar Y en 90 (coordenada inicial)
 GUARDAR_FILAS:
@@ -566,51 +786,53 @@ GUARDAR_COLUMNAS:
     mov cx, si           ; Posición X
     mov dx, di           ; Posición Y
     int 10h              ; Llamada a BIOS para leer el color
-    ; El color del píxel se guarda en AL
-
     ; Convertir el color del píxel a formato hexadecimal y guardarlo
     call CONVERTIR_COLOR_A_HEX
     call ESCRIBIR_COLOR_EN_ARCHIVO
-
     ; Incrementar X y continuar
     inc si
     cmp si, 136 + 398    ; Limitar hasta el ancho de 398 píxeles
     jb GUARDAR_COLUMNAS
-
     ; Al final de la fila, añadir un '@'
     mov dx, offset arroba ; Cargar '@' en DX
     mov ah, 40h
     mov bx, [file_handle]
     mov cx, 1
     int 21h
-
     ; Guardar un salto de línea después de cada fila
     lea dx, salto_linea
     mov ah, 40h
     mov bx, [file_handle]
     mov cx, 2
     int 21h
-
     ; Incrementar Y y continuar
     inc di
-    cmp di, 90 + 300     ; Limitar hasta la altura de 300 píxeles
+    cmp di, 390     ; Limitar hasta la altura de 300 píxeles
     jb GUARDAR_FILAS
-
     ; Al final de todas las columnas, añadir un '%'
     mov dx, offset porcentaje ; Cargar '%' en DX
     mov ah, 40h
     mov bx, [file_handle]
     mov cx, 1
     int 21h
-
     ; Cerrar el archivo
     mov ah, 3Eh          ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
-    ret
 ERROR_GUARDAR:
     ret
 GUARDAR_BOSQUEJO ENDP
+
+
+
+
+
+
+
+
+
+
+
 
 ; Convertir el valor en AL (color del píxel) a dos dígitos hexadecimales y guardarlo en el buffer
 CONVERTIR_COLOR_A_HEX PROC
@@ -631,14 +853,14 @@ IMPRIMIR_HEX_DIGITO PROC
     add al, 7          ; Ajustar para A-F
 ES_DIGITO:
     add al, '0'        ; Convertir a ASCII
-    mov [buffer], al   ; Guardar el valor en el buffer
+    mov [color_buffer], al   ; Guardar el valor en el buffer
     ret
 IMPRIMIR_HEX_DIGITO ENDP
 
 ; Escribir el color en el archivo
 ESCRIBIR_COLOR_EN_ARCHIVO PROC
     ; Escribir el contenido del buffer (color) en el archivo
-    lea dx, buffer
+    lea dx, color_buffer
     mov ah, 40h
     mov bx, [file_handle]
     mov cx, 1               ; Longitud de 2 bytes (cada valor hexadecimal es de 2 dígitos)
@@ -647,7 +869,6 @@ ESCRIBIR_COLOR_EN_ARCHIVO PROC
 ESCRIBIR_COLOR_EN_ARCHIVO ENDP
 
 INSERTAR_IMAGEN PROC
-
     ; Abrir el archivo en modo de lectura
     mov ah, 3Dh           ; Función DOS: Abrir archivo
     lea dx, image_file_name ; Nombre del archivo
@@ -655,53 +876,47 @@ INSERTAR_IMAGEN PROC
     int 21h
     jc ERROR_CARGAR1        ; Si hay error, saltar a manejo de error
     mov [file_handle], ax  ; Guardar el handle del archivo
-
-    ; Recorrer el área del rectángulo (136, 90, 398, 300) x = 262 / y = 210
     mov di, [current_y]          
 CARGAR_FILAS1:
-    mov si, [current_x]         ; PEDING ROW OVERRUN WHEN @
+    mov si, [current_x]
 CARGAR_COLUMNAS1:
     ; Leer el color del archivo (1 dígito hexadecimal o '@')
     mov ah, 3Fh          ; Función DOS: Leer archivo
-    lea dx, buffer       ; Leer en el buffer
+    lea dx, color_buffer      ; Leer en el buffer
     mov bx, [file_handle]
     mov cx, 1            ; Leer 1 byte (un carácter)
     int 21h
     cmp ax, 1            ; Verificar si se leyó 1 byte
     jne FIN_LECTURA1      ; Si no se leyó 1 byte, salir del loop
-
     ; Verificar si el byte leído es '@' (fin de línea)
-    mov al, [buffer]
+    mov al, [color_buffer]
     cmp al, '@'
     je CAMBIAR_FILA1
-
     ; Verificar si el byte leído es un salto de línea (LF o CR)
     cmp al, 10           ; Verificar si es '\n'
     je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
     cmp al, 13           ; Verificar si es '\r'
-    je CARGAR_COLUMNAS   ; Ignorar y leer el siguiente byte
-
+    je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
     ; Verificar si el byte leído es un espacio (omitirlo)
     cmp al, ' '
     je CARGAR_COLUMNAS1   ; Saltar si es un espacio
-
     ; Convertir el valor leído de hexadecimal a un byte de color
+    push ax
     call CONVERTIR_HEX_A_COLOR
-
+    pop ax
     ; Dibujar el píxel en la posición (si, di)
     PINTA_PIXEL si, di, al ; 'al' contiene el valor del color
-
     ; Incrementar X y continuar
     inc si
-    cmp si, 534    ; Limitar hasta el ancho de 398 píxeles
+    cmp si, 534    
     jb CARGAR_COLUMNAS1
-
+    ; Skip
     jmp CARGAR_FILAS1
 
 CAMBIAR_FILA1:
     ; Cambiar a la siguiente fila
     inc di
-    cmp di, 390     ; Limitar hasta la altura de 300 píxeles
+    cmp di, 389     
     jbe CARGAR_FILAS1
 FIN_LECTURA1:
     ; Cerrar el archivo
@@ -709,78 +924,124 @@ FIN_LECTURA1:
     mov bx, [file_handle]
     int 21h
     ret
-
 ERROR_CARGAR1:
     ret
-
 INSERTAR_IMAGEN ENDP
 
 ; Carga un bosquejo (HEX.TXT)
 CARGAR_BOSQUEJO PROC
+    mov al, [buffer]
+    cmp al, ' '
+    je SIN_BUFFER_CARGAR
+    jmp SKIP_SIN_BUFFER_CARGAR
+    SIN_BUFFER_CARGAR:
+    ret
+    SKIP_SIN_BUFFER_CARGAR:
     ; Limpiar el bosquejo anterior
     DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ; Dibujar cuadrado azul (01h es azul)
+    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
+    ;IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del buffer (conteniendo el .txt)
+    ; Verificar si el buffer ya contiene la extensión .txt
+    lea si, buffer
+    mov cx, [buffer_length]
+    add si, cx
+    sub si, 4
+    cmp cx, 4
+    jb ADD_EXTENSION_LOAD
+    ; Comparar los últimos 4 caracteres con ".txt"
+    mov al, [si]
+    cmp al, '.'
+    jne ADD_EXTENSION_LOAD
+    inc si
+    mov al, [si]
+    cmp al, 't'
+    jne ADD_EXTENSION_LOAD
+    inc si
+    mov al, [si]
+    cmp al, 'x'
+    jne ADD_EXTENSION_LOAD
+    inc si
+    mov al, [si]
+    cmp al, 't'
+    jne ADD_EXTENSION_LOAD
+    ; Skip a OPEN_FILE
+    jmp OPEN_FILE
+
+ADD_EXTENSION_LOAD:
+    ; Añadir la extensión .txt al buffer
+    lea si, buffer
+    mov cx, [buffer_length]
+    add si, cx
+    mov byte ptr [si], '.'
+    inc si
+    mov byte ptr [si], 't'
+    inc si
+    mov byte ptr [si], 'x'
+    inc si
+    mov byte ptr [si], 't'
+    inc si
+    mov byte ptr [si], 0
+    add word ptr [buffer_length], 4
+
+OPEN_FILE:
+    ; Repintar el cuadro con nombre para que se vea ahí
+    DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h; Limpiar lo que tenía el cuadro
+    IMPRIMIR_TEXTO 3, 20, buffer, 2Fh   ; Imprimir el texto contenido dentro del bufer (conteniendo el .txt)
+    call IMPRIMIR_BUFFER
     ; Abrir el archivo en modo de lectura
     mov ah, 3Dh           ; Función DOS: Abrir archivo
-    lea dx, nombre_archivo ; Nombre del archivo
+    lea dx, buffer        ; Nombre del archivo
     mov al, 0             ; Modo de lectura
     int 21h
-    jc ERROR_CARGAR        ; Si hay error, saltar a manejo de error
-    mov [file_handle], ax  ; Guardar el handle del archivo
-
+    jc ERROR_CARGAR       ; Si hay error, saltar a manejo de error
+    mov [file_handle], ax ; Guardar el handle del archivo
     ; Recorrer el área del rectángulo (136, 90, 398, 300) x = 262 / y = 210
-    mov di, 90           ; Inicializar Y en 90 (coordenada inicial de la fila)
+    mov di, 90            ; Inicializar Y en 90 (coordenada inicial de la fila)
 CARGAR_FILAS:
-    mov si, 136          ; Inicializar X en 136 (coordenada inicial de la columna)
+    mov si, 136           ; Inicializar X en 136 (coordenada inicial de la columna)
 CARGAR_COLUMNAS:
     ; Leer el color del archivo (1 dígito hexadecimal o '@')
-    mov ah, 3Fh          ; Función DOS: Leer archivo
-    lea dx, buffer       ; Leer en el buffer
+    mov ah, 3Fh           ; Función DOS: Leer archivo
+    lea dx, buffer        ; Leer en el buffer
     mov bx, [file_handle]
-    mov cx, 1            ; Leer 1 byte (un carácter)
+    mov cx, 1             ; Leer 1 byte (un carácter)
     int 21h
-    cmp ax, 1            ; Verificar si se leyó 1 byte
-    jne FIN_LECTURA      ; Si no se leyó 1 byte, salir del loop
-
+    cmp ax, 1             ; Verificar si se leyó 1 byte
+    jne FIN_LECTURA       ; Si no se leyó 1 byte, salir del loop
     ; Verificar si el byte leído es '@' (fin de línea)
     mov al, [buffer]
     cmp al, '@'
     je CAMBIAR_FILA
-
     ; Verificar si el byte leído es un salto de línea (LF o CR)
-    cmp al, 10           ; Verificar si es '\n'
-    je CARGAR_COLUMNAS   ; Ignorar y leer el siguiente byte
-    cmp al, 13           ; Verificar si es '\r'
-    je CARGAR_COLUMNAS   ; Ignorar y leer el siguiente byte
-
+    cmp al, 10            ; Verificar si es '\n'
+    je CARGAR_COLUMNAS    ; Ignorar y leer el siguiente byte
+    cmp al, 13            ; Verificar si es '\r'
+    je CARGAR_COLUMNAS    ; Ignorar y leer el siguiente byte
     ; Verificar si el byte leído es un espacio (omitirlo)
     cmp al, ' '
-    je CARGAR_COLUMNAS   ; Saltar si es un espacio
-
+    je CARGAR_COLUMNAS    ; Saltar si es un espacio
     ; Convertir el valor leído de hexadecimal a un byte de color
     call CONVERTIR_HEX_A_COLOR
-
     ; Dibujar el píxel en la posición (si, di)
     PINTA_PIXEL si, di, al ; 'al' contiene el valor del color
-
     ; Incrementar X y continuar
     inc si
-    cmp si, 534    ; Limitar hasta el ancho de 398 píxeles
+    cmp si, 534           ; Limitar hasta el ancho de 398 píxeles
     jb CARGAR_COLUMNAS
-
     jmp CARGAR_FILAS
 
 CAMBIAR_FILA:
     ; Cambiar a la siguiente fila
     inc di
-    cmp di, 390     ; Limitar hasta la altura de 300 píxeles
+    cmp di, 390           ; Limitar hasta la altura de 300 píxeles
     jbe CARGAR_FILAS
+
 FIN_LECTURA:
     ; Cerrar el archivo
-    mov ah, 3Eh          ; Función DOS: Cerrar archivo
+    mov ah, 3Eh           ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
     ret
-
 ERROR_CARGAR:
     ret
 CARGAR_BOSQUEJO ENDP
@@ -803,19 +1064,86 @@ ES_UN_DIGITO:
     ret
 HEX_DIGITO_A_BYTE ENDP
 
-start: ;################################################################<<<<START>>>>################################################################
+; Draw arrow symbols inside the squares
+DRAW_ARROWS PROC
+    ; Draw left arrow (<) inside the square at (459, 445)
+    ; Coordinates relative to the top-left corner of the square
+    PINTA_PIXEL 469, 460, 00h
+    PINTA_PIXEL 470, 459, 00h
+    PINTA_PIXEL 470, 461, 00h
+    PINTA_PIXEL 471, 458, 00h
+    PINTA_PIXEL 471, 462, 00h
+    PINTA_PIXEL 472, 457, 00h
+    PINTA_PIXEL 472, 463, 00h
+    PINTA_PIXEL 473, 456, 00h
+    PINTA_PIXEL 473, 464, 00h
+    PINTA_PIXEL 474, 455, 00h
+    PINTA_PIXEL 474, 465, 00h
+
+; Draw right arrow (>) inside the square at (494, 445)
+    PINTA_PIXEL 507, 460, 00h
+    PINTA_PIXEL 506, 459, 00h
+    PINTA_PIXEL 506, 461, 00h
+    PINTA_PIXEL 505, 458, 00h
+    PINTA_PIXEL 505, 462, 00h
+    PINTA_PIXEL 504, 457, 00h
+    PINTA_PIXEL 504, 463, 00h
+    PINTA_PIXEL 503, 456, 00h
+    PINTA_PIXEL 503, 464, 00h
+    PINTA_PIXEL 502, 455, 00h
+    PINTA_PIXEL 502, 465, 00h
+
+    ; Draw up arrow (^) inside the square at (529, 445)
+    PINTA_PIXEL 544, 455, 00h
+    PINTA_PIXEL 543, 456, 00h
+    PINTA_PIXEL 545, 456, 00h
+    PINTA_PIXEL 542, 457, 00h
+    PINTA_PIXEL 546, 457, 00h
+    PINTA_PIXEL 541, 458, 00h
+    PINTA_PIXEL 547, 458, 00h
+    PINTA_PIXEL 540, 459, 00h
+    PINTA_PIXEL 548, 459, 00h
+    PINTA_PIXEL 539, 460, 00h
+    PINTA_PIXEL 549, 460, 00h
+
+    ; Draw down arrow (v) inside the square at (564, 445)
+    PINTA_PIXEL 579, 465, 00h
+    PINTA_PIXEL 578, 464, 00h
+    PINTA_PIXEL 580, 464, 00h
+    PINTA_PIXEL 577, 463, 00h
+    PINTA_PIXEL 581, 463, 00h
+    PINTA_PIXEL 576, 462, 00h
+    PINTA_PIXEL 582, 462, 00h
+    PINTA_PIXEL 575, 461, 00h
+    PINTA_PIXEL 583, 461, 00h
+    PINTA_PIXEL 574, 460, 00h
+    PINTA_PIXEL 584, 460, 00h
+    ret
+DRAW_ARROWS ENDP
+
+start: ; ################################################################<<<<START>>>>################################################################
     ; Inicializar segmentos de datos
     mov ax, @DATA
     mov ds, ax
-
     ; Cambiar a modo gráfico 12h (640x480, 16 colores)
     mov ax, 0012h
     int 10h
 
     RELLENAR_PANTALLA 08h 
+    ; Para lineas horizontales o renglones en papel
+    mov dx, 0
+    DRAW_LINES:
+        mov cx, 0
+    DRAW_HORIZONTAL_LINE:
+        PINTA_PIXEL cx, dx, 07h  
+        inc cx
+        cmp cx, 640
+        jb DRAW_HORIZONTAL_LINE
+        add dx, 20               
+        cmp dx, 480
+        jb DRAW_LINES
 
     ; Dibujar el primer píxel en la posición inicial
-   
     DIBUJAR_RECTANGULO 60, 42, 360, 30, 00h;Nombre Dibujo
     DIBUJAR_RECTANGULO 425, 42, 110, 30, 00h;Limpiar btn
   
@@ -823,7 +1151,6 @@ start: ;################################################################<<<<STAR
 	DIBUJAR_RECTANGULO 136, 90, 398, 300, 0Fh ;Cuadro de dibujo
     DIBUJAR_RECTANGULO 60, 90, 60, 300, 00h
 
- 
     DIBUJAR_CUADRADO 564, 350, 30, 01h ; Primer cuadrado rojo
     DIBUJAR_CUADRADO 564, 300, 30, 02h ; Segundo cuadrado
     DIBUJAR_CUADRADO 564, 250, 30, 04h ; Tercer cuadrado
@@ -838,49 +1165,96 @@ start: ;################################################################<<<<STAR
     DIBUJAR_CUADRADO 75, 150, 30, 0Ch ; Quinto cuadrado
     DIBUJAR_CUADRADO 75, 100, 30, 0Fh ; Sexto cuadrado
 
-   
-    DIBUJAR_CUADRADO 564, 445, 30, 0Fh ;tecla ABAJO
-    DIBUJAR_CUADRADO 529, 445, 30, 0Fh ;tecla IZQ
-    DIBUJAR_CUADRADO 600, 445, 30, 0Fh ;tecla DER
+    ; [<-] [->] [^] [v]
+    DIBUJAR_CUADRADO 564, 445, 30, 0Fh ; ABAJO
+    DIBUJAR_CUADRADO 529, 445, 30, 0Fh ; ARRIBA
+    DIBUJAR_CUADRADO 494, 445, 30, 0Fh ; DERECHA
+    DIBUJAR_CUADRADO 459, 445, 30, 0Fh ; IZQUIERDA
+    call DRAW_ARROWS ; para compactar la lógica de flechas pura mierda
+    DIBUJAR_CUADRADO 390, 445, 30, 0Fh ; PINTAR FONDO
 
+    ; Top-left corner
+    PINTA_PIXEL 395, 450, 00h
+    PINTA_PIXEL 396, 450, 00h
+    PINTA_PIXEL 397, 450, 00h
+    PINTA_PIXEL 395, 451, 00h
+    PINTA_PIXEL 395, 452, 00h
+    PINTA_PIXEL 395, 453, 00h
+    ; Top-right corner
+    PINTA_PIXEL 414, 450, 00h
+    PINTA_PIXEL 413, 450, 00h
+    PINTA_PIXEL 412, 450, 00h
+    PINTA_PIXEL 414, 451, 00h
+    PINTA_PIXEL 414, 452, 00h
+    PINTA_PIXEL 414, 453, 00h
+    ; Bottom-left corner
+    PINTA_PIXEL 395, 468, 00h
+    PINTA_PIXEL 396, 468, 00h
+    PINTA_PIXEL 397, 468, 00h
+    PINTA_PIXEL 395, 466, 00h
+    PINTA_PIXEL 395, 467, 00h
+    PINTA_PIXEL 395, 468, 00h
+    ; Bottom-right corner
+    PINTA_PIXEL 414, 468, 00h
+    PINTA_PIXEL 413, 468, 00h
+    PINTA_PIXEL 412, 468, 00h
+    PINTA_PIXEL 414, 466, 00h
+    PINTA_PIXEL 414, 467, 00h
+    PINTA_PIXEL 414, 468, 00h
 
-    DIBUJAR_RECTANGULO 15, 410, 150, 30, 00h ;Guardar Bosquejo btn
-    DIBUJAR_RECTANGULO 15, 445, 150, 30, 00h
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h; CAMPO TEXTO
-    DIBUJAR_RECTANGULO 465, 410, 145, 30, 00h; Insertar imagen
+    DIBUJAR_RECTANGULO 15, 410, 150, 30, 00h  ; Guardar Bosquejo btn
+    DIBUJAR_RECTANGULO 15, 445, 150, 30, 00h  ; 
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Campo de texto
+    DIBUJAR_RECTANGULO 465, 410, 145, 30, 00h ; Insertar imagen
+    
+    IMPRIMIR_TEXTO  3, 55, mensaje1, 1Fh  ; Limpiar
+    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh   ; Dibujo sin nombre
+    IMPRIMIR_TEXTO  26, 2, mensaje3, 1Fh  ; Guardar Bosquejo
+    IMPRIMIR_TEXTO 28, 2, mensaje4, 2Fh   ; Cargar Bosquejo
+    IMPRIMIR_TEXTO 26, 32, mensaje5, 2Fh  ; Campo de texto
+    IMPRIMIR_TEXTO 26, 59, mensaje6, 2Fh  ; Campo de texto
 
-    IMPRIMIR_TEXTO  3, 55, mensaje1, 1Fh  ;Limpiar
-    IMPRIMIR_TEXTO 3, 20, mensaje2, 2Fh   ;Dibujo sin nombre
-    IMPRIMIR_TEXTO  26, 2, mensaje3, 1Fh  ;Guardar Bosquejo
-    IMPRIMIR_TEXTO 28, 2, mensaje4, 2Fh  ;Cargar Bosquejo
-    IMPRIMIR_TEXTO 26, 32, mensaje5, 2Fh  ;Campo de texto
-    IMPRIMIR_TEXTO 26, 59, mensaje6, 2Fh  ;Campo de texto
+    ; Draw borders around UI elements
+    DIBUJAR_BORDE_RECTANGULO 59, 41, 362, 32, 0Fh ; Borde around "Nombre Dibujo"
+    DIBUJAR_BORDE_RECTANGULO 424, 41, 112, 32, 0Fh ; Borde around "Limpiar btn"
+    DIBUJAR_BORDE_RECTANGULO 549, 89, 62, 302, 0Fh ; Borde around right color squares
+    DIBUJAR_BORDE_RECTANGULO 59, 89, 62, 302, 0Fh ; Borde around left color squares
+    DIBUJAR_BORDE_RECTANGULO 528, 444, 32, 32, 00h ; Borde "ARRIBA"
+    DIBUJAR_BORDE_RECTANGULO 493, 444, 32, 32, 00h ; Borde "DERECHA"
+    DIBUJAR_BORDE_RECTANGULO 458, 444, 32, 32, 00h ; Borde "IZQUIERDA"
+    DIBUJAR_BORDE_RECTANGULO 563, 444, 32, 32, 00h ; Borde "ABAJO"
+    DIBUJAR_BORDE_RECTANGULO 389, 444, 32, 32, 00h ; Borde "PINTAR FONDO"
+    DIBUJAR_BORDE_RECTANGULO 14, 409, 152, 32, 0Fh ; Borde "Guardar Bosquejo btn"
+    DIBUJAR_BORDE_RECTANGULO 14, 444, 152, 32, 0Fh ; Borde "Cargar Bosquejo btn"
+    DIBUJAR_BORDE_RECTANGULO 174, 409, 282, 32, 0Fh ; Borde "Campo de texto"
+    DIBUJAR_BORDE_RECTANGULO 464, 409, 147, 32, 0Fh ; Borde "Insertar imagen"
+
     
 call INIT_MOUSE
 
-
-MAIN_LOOP: ; ################################################################<<<<MAIN LOOP>>>>################################################################
+MAIN_LOOP:; ################################################################<<<<MAIN LOOP>>>>################################################################
     ; Detectar clic del mouse y pintar
     call DIBUJAR_MOUSE_PIXEL
-
+    ; Verificaciones de input
     VERIFICAR_CAMPO_TEXTO
     VERIFICAR_LIMPIAR
     VERIFICAR_GUARDAR
     VERIFICAR_CARGAR
     VERIFICAR_INSERTAR
+    VERIFICAR_ABAJO
+    VERIFICAR_DERECHA
+    VERIFICAR_IZQUIERDA
+    VERIFICAR_ARRIBA
+    VERIFICAR_PINTAR_FONDO
 
     ; Capturar entrada de texto
     call CAPTURAR_ENTRADA
-    
     ; Control de teclas (WASD)
     call MOVER_PIXEL
-
     jmp MAIN_LOOP
-SALIR:
-    ; Restaurar el modo de texto 03h
 
-    ; Terminar el programa
+SALIR:
+; Terminar el programa
     mov ah, 4Ch
     int 21h
-
 END start

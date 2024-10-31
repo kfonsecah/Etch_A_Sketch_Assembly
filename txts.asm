@@ -826,9 +826,62 @@ ESCRIBIR_COLOR_EN_ARCHIVO PROC
 ESCRIBIR_COLOR_EN_ARCHIVO ENDP
 
 INSERTAR_IMAGEN PROC
+    mov al, [buffer]
+    cmp al, ' '
+    je SIN_BUFFER_INSERTAR
+    jmp SKIP_SIN_BUFFER_INSERTAR
+
+SIN_BUFFER_INSERTAR:
+    ret
+
+SKIP_SIN_BUFFER_INSERTAR:
+        ; Verificar si el buffer ya contiene la extensión .txt
+    lea si, buffer
+    mov cx, [buffer_length]
+    add si, cx
+    sub si, 4
+    cmp cx, 4
+    jb ADD_EXTENSION_INSERTAR
+
+    ; Comparar los últimos 4 caracteres con ".txt"
+    mov al, [si]
+    cmp al, '.'
+    jne ADD_EXTENSION_INSERTAR
+    inc si
+    mov al, [si]
+    cmp al, 't'
+    jne ADD_EXTENSION_INSERTAR
+    inc si
+    mov al, [si]
+    cmp al, 'x'
+    jne ADD_EXTENSION_INSERTAR
+    inc si
+    mov al, [si]
+    cmp al, 't'
+    jne ADD_EXTENSION_INSERTAR
+
+    jmp OPEN_FILE_INSERTAR
+
+ADD_EXTENSION_INSERTAR:
+    ; Añadir la extensión .txt al buffer
+    lea si, buffer
+    mov cx, [buffer_length]
+    add si, cx
+    mov byte ptr [si], '.'
+    inc si
+    mov byte ptr [si], 't'
+    inc si
+    mov byte ptr [si], 'x'
+    inc si
+    mov byte ptr [si], 't'
+    inc si
+    mov byte ptr [si], 0
+    add word ptr [buffer_length], 4
+
+OPEN_FILE_INSERTAR:
     ; Abrir el archivo en modo de lectura
     mov ah, 3Dh           ; Función DOS: Abrir archivo
-    lea dx, image_file_name ; Nombre del archivo
+    lea dx, buffer ; Nombre del archivo
     mov al, 0             ; Modo de lectura
     int 21h
     jc ERROR_CARGAR1      ; Si hay error, saltar a manejo de error
@@ -878,6 +931,7 @@ FIN_LECTURA1:
     mov ah, 3Eh          ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
+    call IMPRIMIR_BUFFER
     ret
 ERROR_CARGAR1:
     ret

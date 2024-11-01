@@ -12,7 +12,7 @@
     mensaje_exito db 'Archivo guardado!', 0
     mensaje_error db 'Error al abrir archivo!', 0
     
-    buffer db 100 dup(' ')          ; Espacio para almacenar texto
+    buffer db 100 dup(' ')          ; Espacio para almacenar texto '                                          '
     color_buffer db 2 dup(' ')      ; Espacio para almacenar colores
     letter_buffer db 2 dup(' ')     ; Espacio para almacenar letras
     
@@ -67,7 +67,6 @@ PINTA_PIXEL macro x, y, color
     mov dx, y
     int 10h
 endm
-
 
 ; Macro para dibujar un cuadrado
 DIBUJAR_CUADRADO macro x_inicial, y_inicial, tamano, color
@@ -611,7 +610,6 @@ CAPTURAR_ENTRADA PROC
     ; Imprimir el texto actualizado
     call IMPRIMIR_BUFFER
     jmp NO_KEY_PRESSED2
-
 BORRAR_CARACTER:
     cmp [buffer_length], 0    ; Verificar si el buffer está vacío
     je NO_KEY_PRESSED2        ; Si está vacío, no hacer nada
@@ -632,7 +630,6 @@ NO_KEY_PRESSED2:
     mov al, [buffer]
     cmp al, ' '
     jne NO_INPUT_YET
-    ; IMPRIMIR_TEXTO 26, 32, mensaje5, 2Fh  ; Campo de texto
 NO_INPUT_YET:
     ret
 CAPTURAR_ENTRADA ENDP
@@ -703,7 +700,6 @@ SKIP_SIN_BUFFER_GUARDAR:
     sub si, 4
     cmp cx, 4
     jb ADD_EXTENSION_SAVE
-
     ; Comparar los últimos 4 caracteres con ".txt"
     mov al, [si]
     cmp al, '.'
@@ -884,7 +880,7 @@ OPEN_FILE_INSERTAR:
     lea dx, buffer ; Nombre del archivo
     mov al, 0             ; Modo de lectura
     int 21h
-    jc ERROR_CARGAR1      ; Si hay error, saltar a manejo de error
+    jc ERROR_CARGAR1        ; Si hay error, saltar a manejo de error
     mov [file_handle], ax  ; Guardar el handle del archivo
     mov di, [current_y]          
 CARGAR_FILAS1:
@@ -892,33 +888,35 @@ CARGAR_FILAS1:
 CARGAR_COLUMNAS1:
     ; Leer el color del archivo (1 dígito hexadecimal o '@')
     mov ah, 3Fh          ; Función DOS: Leer archivo
-    lea dx, color_buffer  ; Leer en el buffer
+    lea dx, letter_buffer      ; Leer en el buffer
     mov bx, [file_handle]
-    mov cx, 1             ; Leer 1 byte (un carácter)
+    mov cx, 1            ; Leer 1 byte (un carácter)
     int 21h
-    cmp ax, 1             ; Verificar si se leyó 1 byte
+    cmp ax, 1            ; Verificar si se leyó 1 byte
     jne FIN_LECTURA1      ; Si no se leyó 1 byte, salir del loop
     ; Verificar si el byte leído es '@' (fin de línea)
-    mov al, [color_buffer]
+    mov al, [letter_buffer]
     cmp al, '@'
     je CAMBIAR_FILA1
-    ; Ignorar saltos de línea y espacios
-    cmp al, 10            ; Verificar si es '\n'
-    je CARGAR_COLUMNAS1   
-    cmp al, 13            ; Verificar si es '\r'
-    je CARGAR_COLUMNAS1   
+    ; Verificar si el byte leído es un salto de línea (LF o CR)
+    cmp al, 10           ; Verificar si es '\n'
+    je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
+    cmp al, 13           ; Verificar si es '\r'
+    je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
+    ; Verificar si el byte leído es un espacio (omitirlo)
     cmp al, ' '
     je CARGAR_COLUMNAS1   ; Saltar si es un espacio
     ; Convertir el valor leído de hexadecimal a un byte de color
-    push ax
+    ;push ax
     call CONVERTIR_HEX_A_COLOR
-    pop ax
+    ;pop ax
     ; Dibujar el píxel en la posición (si, di)
     PINTA_PIXEL si, di, al ; 'al' contiene el valor del color
     ; Incrementar X y continuar
     inc si
     cmp si, 534    
     jb CARGAR_COLUMNAS1
+    ; Skip
     jmp CARGAR_FILAS1
 
 CAMBIAR_FILA1:
@@ -931,7 +929,6 @@ FIN_LECTURA1:
     mov ah, 3Eh          ; Función DOS: Cerrar archivo
     mov bx, [file_handle]
     int 21h
-    call IMPRIMIR_BUFFER
     ret
 ERROR_CARGAR1:
     ret
@@ -1023,7 +1020,7 @@ CARGAR_COLUMNAS:
     jne FIN_LECTURA       ; Salir del loop si no se leyó
 
     ; Verificar si el byte leído es '@' (fin de línea)
-    mov al, [letter_buffer]
+    mov al, [letter_buFfer]
     cmp al, '@'
     je CAMBIAR_FILA
 

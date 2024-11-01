@@ -581,58 +581,71 @@ NO_KEY_PRESSED:
 MOVER_PIXEL ENDP
 
 CAPTURAR_ENTRADA PROC
-    cmp [capture_enabled], 1  ; Verificar si la captura está habilitada
-    jne NO_CAPTURE_ACTIVE     ; Si no está habilitada, continuar sin capturar
+    cmp [capture_enabled], 1         ; Verify if capture is enabled
+    jne NO_CAPTURE_ACTIVE            ; Skip capture if disabled
 
-    mov ah, 01h               ; Verificar si hay una tecla presionada
+    mov ah, 01h                      ; Check if a key is pressed
     int 16h
-    jz NO_KEY_PRESSED2        ; Si no hay tecla presionada, salir
+    jz NO_KEY_PRESSED2               ; Exit if no key is pressed
 
     mov ah, 00h
-    int 16h                   ; Leer la tecla presionada
-    cmp al, 13                ; Verificar si se presionó Enter (código ASCII 13)
-    je NO_KEY_PRESSED2        ; Si es Enter, no hacer nada
+    int 16h                          ; Read the pressed key
 
-    cmp al, 8                 ; Verificar si se presionó Backspace (código ASCII 8)
-    je BORRAR_CARACTER        ; Si es Backspace, ir a borrar carácter
+    ; Handle Backspace first to avoid interference with buffer input
+    cmp al, 8                        ; Check if Backspace (ASCII 8)
+    je BORRAR_CARACTER               ; If Backspace, go to erase character
 
-    cmp al, 27                ; Verificar si se presionó Esc (código ASCII 27)
-    je NO_KEY_PRESSED2        ; Ignorar Esc para evitar salir
-    ; Verificar si el buffer está lleno
-    cmp [buffer_length], 10   ; Verificar si el buffer está lleno (máximo 10 caracteres)
-    jge NO_KEY_PRESSED2       ; Si está lleno, no hacer nada y seguir en el loop
-    ; Guardar el carácter en el buffer
+    ; Handle Enter key
+    cmp al, 13                       ; Check if Enter (ASCII 13)
+    je NO_KEY_PRESSED2               ; Ignore Enter, skip capturing
+
+    cmp al, 27                       ; Check if Esc (ASCII 27)
+    je NO_KEY_PRESSED2               ; Ignore Esc to avoid exiting
+
+    ; Check if buffer is full
+    cmp [buffer_length], 10          ; Buffer max length check
+    jge NO_KEY_PRESSED2              ; Skip if buffer is full
+
+    ; Store the character in buffer
     mov si, [buffer_length]
     mov [buffer + si], al
-    inc word ptr [buffer_length]
-    ; Añadir el terminador nulo al final del buffer
+    inc word ptr [buffer_length]     ; Increment buffer length
+
+    ; Add null terminator at the end of buffer
     mov byte ptr [buffer + si + 1], 0
-    ; Imprimir el texto actualizado
+    ; Display updated text
     call IMPRIMIR_BUFFER
+
+    ; Short delay to debounce key press for adding
+    mov cx, 5000
+DEBOUNCE_INC_DELAY:
+    loop DEBOUNCE_INC_DELAY
     jmp NO_KEY_PRESSED2
+
 BORRAR_CARACTER:
-    cmp [buffer_length], 0    ; Verificar si el buffer está vacío
-    je NO_KEY_PRESSED2        ; Si está vacío, no hacer nada
-    ; Reducir la longitud del buffer
+    cmp [buffer_length], 0           ; Check if buffer is empty
+    je NO_KEY_PRESSED2               ; Exit if buffer is empty
+    ; Reduce buffer length
     dec word ptr [buffer_length]
     mov si, [buffer_length]
-    ; Reemplazar el último carácter con un espacio en blanco
-    mov byte ptr [buffer + si], ' '
-    ; Añadir el terminador nulo al final del buffer
+    ; Replace the last character with a null terminator
     mov byte ptr [buffer + si], 0
-    ; Imprimir el texto actualizado
-    ; Reestablecer el cuadro de input de texto
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Campo de texto
+    ; Redraw input field
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Text field box
     call IMPRIMIR_BUFFER
+    ; Short delay to debounce key press for deleting
+    mov cx, 5000
+DEBOUNCE_DEC_DELAY:
+    loop DEBOUNCE_DEC_DELAY
     jmp NO_KEY_PRESSED2
+
 NO_CAPTURE_ACTIVE:
 NO_KEY_PRESSED2:
-    mov al, [buffer]
-    cmp al, ' '
-    jne NO_INPUT_YET
-NO_INPUT_YET:
     ret
 CAPTURAR_ENTRADA ENDP
+
+
+
 
 ; Imprime el contenido del buffer en la posición del cursor
 IMPRIMIR_BUFFER PROC

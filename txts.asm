@@ -581,59 +581,59 @@ NO_KEY_PRESSED:
 MOVER_PIXEL ENDP
 
 CAPTURAR_ENTRADA PROC
-    cmp [capture_enabled], 1         ; Verify if capture is enabled
-    jne NO_CAPTURE_ACTIVE            ; Skip capture if disabled
+    cmp [capture_enabled], 1         ; Verificar si la captura está habilitada
+    jne NO_CAPTURE_ACTIVE            ; Omitir captura si está deshabilitada
 
-    mov ah, 01h                      ; Check if a key is pressed
+    mov ah, 01h                      ; Verificar si se ha presionado una tecla
     int 16h
-    jz NO_KEY_PRESSED2               ; Exit if no key is pressed
+    jz NO_KEY_PRESSED2               ; Salir si no se ha presionado ninguna tecla
 
     mov ah, 00h
-    int 16h                          ; Read the pressed key
+    int 16h                          ; Leer la tecla presionada
 
-    ; Handle Backspace first to avoid interference with buffer input
-    cmp al, 8                        ; Check if Backspace (ASCII 8)
-    je BORRAR_CARACTER               ; If Backspace, go to erase character
+    ; Manejar Backspace primero para evitar interferencias con la entrada del buffer
+    cmp al, 8                        ; Verificar si es Backspace (ASCII 8)
+    je BORRAR_CARACTER               ; Si es Backspace, ir a borrar el carácter
 
-    ; Handle Enter key
-    cmp al, 13                       ; Check if Enter (ASCII 13)
-    je NO_KEY_PRESSED2               ; Ignore Enter, skip capturing
+    ; Manejar la tecla Enter
+    cmp al, 13                       ; Verificar si es Enter (ASCII 13)
+    je NO_KEY_PRESSED2               ; Ignorar Enter, omitir captura
 
-    cmp al, 27                       ; Check if Esc (ASCII 27)
-    je NO_KEY_PRESSED2               ; Ignore Esc to avoid exiting
+    cmp al, 27                       ; Verificar si es Esc (ASCII 27)
+    je NO_KEY_PRESSED2               ; Ignorar Esc para evitar salir
 
-    ; Check if buffer is full
-    cmp [buffer_length], 10          ; Buffer max length check
-    jge NO_KEY_PRESSED2              ; Skip if buffer is full
+    ; Verificar si el buffer está lleno
+    cmp [buffer_length], 10          ; Comprobar longitud máxima del buffer
+    jge NO_KEY_PRESSED2              ; Omitir si el buffer está lleno
 
-    ; Store the character in buffer
+    ; Almacenar el carácter en el buffer
     mov si, [buffer_length]
     mov [buffer + si], al
-    inc word ptr [buffer_length]     ; Increment buffer length
+    inc word ptr [buffer_length]     ; Incrementar la longitud del buffer
 
-    ; Add null terminator at the end of buffer
+    ; Añadir terminador nulo al final del buffer
     mov byte ptr [buffer + si + 1], 0
-    ; Display updated text
+    ; Mostrar texto actualizado
     call IMPRIMIR_BUFFER
 
-    ; Short delay to debounce key press for adding
+    ; Pequeño retraso para debounce en la pulsación de teclas al añadir
     mov cx, 5000
 DEBOUNCE_INC_DELAY:
     loop DEBOUNCE_INC_DELAY
     jmp NO_KEY_PRESSED2
 
 BORRAR_CARACTER:
-    cmp [buffer_length], 0           ; Check if buffer is empty
-    je NO_KEY_PRESSED2               ; Exit if buffer is empty
-    ; Reduce buffer length
+    cmp [buffer_length], 0           ; Verificar si el buffer está vacío
+    je NO_KEY_PRESSED2               ; Salir si el buffer está vacío
+    ; Reducir la longitud del buffer
     dec word ptr [buffer_length]
     mov si, [buffer_length]
-    ; Replace the last character with a null terminator
+    ; Reemplazar el último carácter con un terminador nulo
     mov byte ptr [buffer + si], 0
-    ; Redraw input field
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Text field box
+    ; Redibujar el campo de entrada de texto
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Cuadro de campo de texto
     call IMPRIMIR_BUFFER
-    ; Short delay to debounce key press for deleting
+    ; Pequeño retraso para debounce en la pulsación de teclas al borrar
     mov cx, 5000
 DEBOUNCE_DEC_DELAY:
     loop DEBOUNCE_DEC_DELAY
@@ -643,9 +643,6 @@ NO_CAPTURE_ACTIVE:
 NO_KEY_PRESSED2:
     ret
 CAPTURAR_ENTRADA ENDP
-
-
-
 
 ; Imprime el contenido del buffer en la posición del cursor
 IMPRIMIR_BUFFER PROC

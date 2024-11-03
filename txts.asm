@@ -20,9 +20,9 @@
     capture_enabled db 0             ; 0 = No captura, 1 = Captura entrada
     movement_enabled dw 0            ; Flag para manejo de teclas direccionales
 
-    current_x dw 65535               ; Coordenada X inicial (fuera de pantalla)
-    current_y dw 65535               ; Coordenada Y inicial (centro de pantalla)
-    color_pixel db 00h 
+    current_x dw 334               ; Coordenada X inicial (centro del área de dibujo)
+    current_y dw 240               ; Coordenada Y inicial (centro del área de dibujo)
+    color_pixel db 08h 
     old_color_pixel db 0Fh
 
     mouse_x dw 0                     ; Coordenada X del mouse
@@ -31,7 +31,7 @@
 
     ; Colores de cuadrados
     square_1_color db 01h 
-    square_2_color db 02h 
+    square_2_color db 0Eh   ; Amarillo como las miadas de zakary 
     square_3_color db 04h 
     square_4_color db 05h 
     square_5_color db 06h
@@ -192,6 +192,9 @@ VERIFICAR_CUADRADO macro x_min, x_max, y_min, y_max, color
     ja FUERA_CUADRADO
     mov al, color           ; Cambiar color si está dentro del cuadrado
     mov [color_pixel], al
+
+    ; Dibujar el cuadrado de color seleccionado
+    DIBUJAR_CUADRADO 355, 445, 30, [color_pixel]
 FUERA_CUADRADO:
     endm
 
@@ -442,6 +445,8 @@ NO_PINTAR_PIXEL:
 
     mov al, [color_pixel]
     mov [old_color_pixel], al
+
+    DIBUJAR_CUADRADO 335, 460, 15, al
 FUERA_PINTAR_FONDO:
     endm
 
@@ -581,59 +586,59 @@ NO_KEY_PRESSED:
 MOVER_PIXEL ENDP
 
 CAPTURAR_ENTRADA PROC
-    cmp [capture_enabled], 1         ; Verificar si la captura está habilitada
-    jne NO_CAPTURE_ACTIVE            ; Omitir captura si está deshabilitada
+    cmp [capture_enabled], 1         ; Verify if capture is enabled
+    jne NO_CAPTURE_ACTIVE            ; Skip capture if disabled
 
-    mov ah, 01h                      ; Verificar si se ha presionado una tecla
+    mov ah, 01h                      ; Check if a key is pressed
     int 16h
-    jz NO_KEY_PRESSED2               ; Salir si no se ha presionado ninguna tecla
+    jz NO_KEY_PRESSED2               ; Exit if no key is pressed
 
     mov ah, 00h
-    int 16h                          ; Leer la tecla presionada
+    int 16h                          ; Read the pressed key
 
-    ; Manejar Backspace primero para evitar interferencias con la entrada del buffer
-    cmp al, 8                        ; Verificar si es Backspace (ASCII 8)
-    je BORRAR_CARACTER               ; Si es Backspace, ir a borrar el carácter
+    ; Handle Backspace first to avoid interference with buffer input
+    cmp al, 8                        ; Check if Backspace (ASCII 8)
+    je BORRAR_CARACTER               ; If Backspace, go to erase character
 
-    ; Manejar la tecla Enter
-    cmp al, 13                       ; Verificar si es Enter (ASCII 13)
-    je NO_KEY_PRESSED2               ; Ignorar Enter, omitir captura
+    ; Handle Enter key
+    cmp al, 13                       ; Check if Enter (ASCII 13)
+    je NO_KEY_PRESSED2               ; Ignore Enter, skip capturing
 
-    cmp al, 27                       ; Verificar si es Esc (ASCII 27)
-    je NO_KEY_PRESSED2               ; Ignorar Esc para evitar salir
+    cmp al, 27                       ; Check if Esc (ASCII 27)
+    je NO_KEY_PRESSED2               ; Ignore Esc to avoid exiting
 
-    ; Verificar si el buffer está lleno
-    cmp [buffer_length], 10          ; Comprobar longitud máxima del buffer
-    jge NO_KEY_PRESSED2              ; Omitir si el buffer está lleno
+    ; Check if buffer is full
+    cmp [buffer_length], 10          ; Buffer max length check
+    jge NO_KEY_PRESSED2              ; Skip if buffer is full
 
-    ; Almacenar el carácter en el buffer
+    ; Store the character in buffer
     mov si, [buffer_length]
     mov [buffer + si], al
-    inc word ptr [buffer_length]     ; Incrementar la longitud del buffer
+    inc word ptr [buffer_length]     ; Increment buffer length
 
-    ; Añadir terminador nulo al final del buffer
+    ; Add null terminator at the end of buffer
     mov byte ptr [buffer + si + 1], 0
-    ; Mostrar texto actualizado
+    ; Display updated text
     call IMPRIMIR_BUFFER
 
-    ; Pequeño retraso para debounce en la pulsación de teclas al añadir
+    ; Short delay to debounce key press for adding
     mov cx, 5000
 DEBOUNCE_INC_DELAY:
     loop DEBOUNCE_INC_DELAY
     jmp NO_KEY_PRESSED2
 
 BORRAR_CARACTER:
-    cmp [buffer_length], 0           ; Verificar si el buffer está vacío
-    je NO_KEY_PRESSED2               ; Salir si el buffer está vacío
-    ; Reducir la longitud del buffer
+    cmp [buffer_length], 0           ; Check if buffer is empty
+    je NO_KEY_PRESSED2               ; Exit if buffer is empty
+    ; Reduce buffer length
     dec word ptr [buffer_length]
     mov si, [buffer_length]
-    ; Reemplazar el último carácter con un terminador nulo
+    ; Replace the last character with a null terminator
     mov byte ptr [buffer + si], 0
-    ; Redibujar el campo de entrada de texto
-    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Cuadro de campo de texto
+    ; Redraw input field
+    DIBUJAR_RECTANGULO 175, 410, 280, 30, 00h ; Text field box
     call IMPRIMIR_BUFFER
-    ; Pequeño retraso para debounce en la pulsación de teclas al borrar
+    ; Short delay to debounce key press for deleting
     mov cx, 5000
 DEBOUNCE_DEC_DELAY:
     loop DEBOUNCE_DEC_DELAY
@@ -832,6 +837,7 @@ ESCRIBIR_COLOR_EN_ARCHIVO PROC
 ESCRIBIR_COLOR_EN_ARCHIVO ENDP
 
 INSERTAR_IMAGEN PROC
+    ; Verificar si el buffer está vacío
     mov al, [buffer]
     cmp al, ' '
     je SIN_BUFFER_INSERTAR
@@ -841,7 +847,6 @@ SIN_BUFFER_INSERTAR:
     ret
 
 SKIP_SIN_BUFFER_INSERTAR:
-        ; Verificar si el buffer ya contiene la extensión .txt
     lea si, buffer
     mov cx, [buffer_length]
     add si, cx
@@ -849,7 +854,6 @@ SKIP_SIN_BUFFER_INSERTAR:
     cmp cx, 4
     jb ADD_EXTENSION_INSERTAR
 
-    ; Comparar los últimos 4 caracteres con ".txt"
     mov al, [si]
     cmp al, '.'
     jne ADD_EXTENSION_INSERTAR
@@ -869,7 +873,6 @@ SKIP_SIN_BUFFER_INSERTAR:
     jmp OPEN_FILE_INSERTAR
 
 ADD_EXTENSION_INSERTAR:
-    ; Añadir la extensión .txt al buffer
     lea si, buffer
     mov cx, [buffer_length]
     add si, cx
@@ -885,64 +888,66 @@ ADD_EXTENSION_INSERTAR:
     add word ptr [buffer_length], 4
 
 OPEN_FILE_INSERTAR:
-    ; Abrir el archivo en modo de lectura
-    mov ah, 3Dh           ; Función DOS: Abrir archivo
-    lea dx, buffer ; Nombre del archivo
-    mov al, 0             ; Modo de lectura
+    mov ah, 3Dh           ; Abrir archivo en modo de lectura
+    lea dx, buffer
+    mov al, 0
     int 21h
-    jc ERROR_CARGAR1        ; Si hay error, saltar a manejo de error
-    mov [file_handle], ax  ; Guardar el handle del archivo
-    mov di, [current_y]          
+    jc ERROR_CARGAR1
+    mov [file_handle], ax
+
+    mov di, [current_y]         ; Posición Y inicial
 CARGAR_FILAS1:
-    mov si, [current_x]
+    mov si, [current_x]         ; Posición X inicial para cada línea
+    mov cx, 534                 ; Límite máximo de X en pantalla
+
 CARGAR_COLUMNAS1:
-    ; Leer el color del archivo (1 dígito hexadecimal o '@')
-    mov ah, 3Fh          ; Función DOS: Leer archivo
-    lea dx, letter_buffer      ; Leer en el buffer
+    mov ah, 3Fh
+    lea dx, letter_buffer
     mov bx, [file_handle]
-    mov cx, 1            ; Leer 1 byte (un carácter)
+    mov cx, 1
     int 21h
-    cmp ax, 1            ; Verificar si se leyó 1 byte
-    jne FIN_LECTURA1      ; Si no se leyó 1 byte, salir del loop
-    ; Verificar si el byte leído es '@' (fin de línea)
+    cmp ax, 1
+    jne FIN_LECTURA1
+
     mov al, [letter_buffer]
+    
     cmp al, '@'
     je CAMBIAR_FILA1
-    ; Verificar si el byte leído es un salto de línea (LF o CR)
-    cmp al, 10           ; Verificar si es '\n'
-    je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
-    cmp al, 13           ; Verificar si es '\r'
-    je CARGAR_COLUMNAS1   ; Ignorar y leer el siguiente byte
-    ; Verificar si el byte leído es un espacio (omitirlo)
+
+    cmp al, 10
+    je CARGAR_COLUMNAS1
+    cmp al, 13
+    je CARGAR_COLUMNAS1
     cmp al, ' '
-    je CARGAR_COLUMNAS1   ; Saltar si es un espacio
-    ; Convertir el valor leído de hexadecimal a un byte de color
-    ;push ax
+    je CARGAR_COLUMNAS1
+
     call CONVERTIR_HEX_A_COLOR
-    ;pop ax
-    ; Dibujar el píxel en la posición (si, di)
-    PINTA_PIXEL si, di, al ; 'al' contiene el valor del color
-    ; Incrementar X y continuar
-    inc si
-    cmp si, 534    
-    jb CARGAR_COLUMNAS1
-    ; Skip
-    jmp CARGAR_FILAS1
+    cmp si, 534               ; Si estamos dentro del límite de X, pintar
+    jb PAINT_PIXEL
+
+    jmp CARGAR_COLUMNAS1
+
+PAINT_PIXEL:
+    PINTA_PIXEL si, di, al
+    inc si                    ; Moverse a la siguiente posición X
+    jmp CARGAR_COLUMNAS1      ; Continuar leyendo el archivo
 
 CAMBIAR_FILA1:
-    ; Cambiar a la siguiente fila
     inc di
-    cmp di, 389     
-    jbe CARGAR_FILAS1
+    cmp di, 389               ; Verificar si estamos dentro del límite de Y
+    jbe CARGAR_FILAS1         ; Continuar si estamos dentro de los límites
+
 FIN_LECTURA1:
-    ; Cerrar el archivo
-    mov ah, 3Eh          ; Función DOS: Cerrar archivo
+    mov ah, 3Eh
     mov bx, [file_handle]
     int 21h
     ret
+
 ERROR_CARGAR1:
     ret
 INSERTAR_IMAGEN ENDP
+
+
 
 ; Cargar un bosquejo (HEX.TXT)
 CARGAR_BOSQUEJO PROC
@@ -1164,11 +1169,11 @@ mov dx, 0
 DRAW_LINES:
     mov cx, 0
 DRAW_HORIZONTAL_LINE:
-    PINTA_PIXEL cx, dx, 07h  
+    PINTA_PIXEL cx, dx, 00h  
     inc cx
     cmp cx, 640
     jb DRAW_HORIZONTAL_LINE
-    add dx, 20               
+    add dx, 40               
     cmp dx, 480
     jb DRAW_LINES
 
@@ -1181,7 +1186,7 @@ DIBUJAR_RECTANGULO 60, 90, 60, 300, 00h
 
 ; Dibujar cuadrados de colores
 DIBUJAR_CUADRADO 564, 350, 30, 01h ; Primer cuadrado rojo
-DIBUJAR_CUADRADO 564, 300, 30, 02h ; Segundo cuadrado
+DIBUJAR_CUADRADO 564, 300, 30, 0Eh ; Segundo cuadrado
 DIBUJAR_CUADRADO 564, 250, 30, 04h ; Tercer cuadrado
 DIBUJAR_CUADRADO 564, 200, 30, 05h ; Cuarto cuadrado
 DIBUJAR_CUADRADO 564, 150, 30, 06h ; Quinto cuadrado
@@ -1202,6 +1207,8 @@ DIBUJAR_CUADRADO 459, 445, 30, 0Fh ; IZQUIERDA
 call DRAW_ARROWS ; Para dibujar flechas
 
 DIBUJAR_CUADRADO 390, 445, 30, 0Fh ; PINTAR FONDO
+DIBUJAR_CUADRADO 355, 445, 30, [color_pixel] ; CUADRADO DE COLOR
+DIBUJAR_CUADRADO 335, 460, 15, [old_color_pixel] ; CUADRADO DE COLOR DE FONDO PASADO
 
 ; Dibujar esquinas
 ; Top-left corner
@@ -1259,6 +1266,8 @@ DIBUJAR_BORDE_RECTANGULO 14, 409, 152, 32, 0Fh ; Borde "Guardar Bosquejo btn"
 DIBUJAR_BORDE_RECTANGULO 14, 444, 152, 32, 0Fh ; Borde "Cargar Bosquejo btn"
 DIBUJAR_BORDE_RECTANGULO 174, 409, 282, 32, 0Fh ; Borde "Campo de texto"
 DIBUJAR_BORDE_RECTANGULO 464, 409, 147, 32, 0Fh ; Borde "Insertar imagen"
+DIBUJAR_BORDE_RECTANGULO 354, 444, 32, 32, 00h ; Borde en el cuadrado de color
+DIBUJAR_BORDE_RECTANGULO 334, 459, 17, 17, 00h ; Borde alrededor del cuadrado de color de fondo pasado
 
 call INIT_MOUSE
 

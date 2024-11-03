@@ -550,7 +550,10 @@ MOVER_PIXEL PROC
     cmp al, 'd'
     je MOVER_DERECHA
     cmp al, 27
-    jmp SALIR                ; Salir si se presiona Esc
+    jne INPUT_NO_SALIR
+    mov ah, 4Ch
+    int 21h
+    INPUT_NO_SALIR:
     ret
 MOVER_ARRIBA:
     cmp [current_y], 90
@@ -946,8 +949,6 @@ FIN_LECTURA1:
 ERROR_CARGAR1:
     ret
 INSERTAR_IMAGEN ENDP
-
-
 
 ; Cargar un bosquejo (HEX.TXT)
 CARGAR_BOSQUEJO PROC

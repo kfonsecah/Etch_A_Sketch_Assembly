@@ -891,6 +891,7 @@ ADD_EXTENSION_INSERTAR:
     add word ptr [buffer_length], 4
 
 OPEN_FILE_INSERTAR:
+    call IMPRIMIR_BUFFER
     mov ah, 3Dh           ; Abrir archivo en modo de lectura
     lea dx, buffer
     mov al, 0

@@ -918,6 +918,9 @@ CARGAR_COLUMNAS1:
     cmp al, '@'
     je CAMBIAR_FILA1
 
+    cmp al, '%'
+    je FIN_LECTURA1
+
     cmp al, 10
     je CARGAR_COLUMNAS1
     cmp al, 13
@@ -1037,9 +1040,12 @@ CARGAR_COLUMNAS:
     jne FIN_LECTURA       ; Salir del loop si no se leyó
 
     ; Verificar si el byte leído es '@' (fin de línea)
-    mov al, [letter_buFfer]
+    mov al, [letter_buffer]
     cmp al, '@'
     je CAMBIAR_FILA
+
+    cmp al, '%'
+    je FIN_LECTURA
 
     ; Ignorar saltos de línea y espacios
     cmp al, 10            ; Verificar si es '\n'
